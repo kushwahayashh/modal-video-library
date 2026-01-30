@@ -36,7 +36,10 @@ a {
   text-decoration: none;
 }
 
-button {
+button,
+input,
+textarea,
+select {
   font-family: inherit;
   cursor: pointer;
 }

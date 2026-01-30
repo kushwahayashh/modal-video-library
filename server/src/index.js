@@ -179,11 +179,11 @@ function getVideoDuration(filePath) {
     );
     const seconds = parseFloat(result.trim());
     if (isNaN(seconds)) return null;
-    
+
     const hrs = Math.floor(seconds / 3600);
     const mins = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
-    
+
     if (hrs > 0) {
       return `${hrs}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
     }
@@ -192,6 +192,104 @@ function getVideoDuration(filePath) {
     return null;
   }
 }
+
+// File manager helper - check path is within DATA_DIR
+function isPathSafe(targetPath) {
+  const resolved = path.resolve(DATA_DIR, targetPath);
+  return resolved.startsWith(path.resolve(DATA_DIR));
+}
+
+// List files and folders
+app.get("/api/files", async (request, reply) => {
+  const subPath = request.query.path || "";
+
+  if (!isPathSafe(subPath)) {
+    return reply.status(403).send({ error: "Access denied" });
+  }
+
+  const targetDir = path.resolve(DATA_DIR, subPath);
+
+  if (!fs.existsSync(targetDir)) {
+    return reply.status(404).send({ error: "Directory not found" });
+  }
+
+  try {
+    const entries = fs.readdirSync(targetDir, { withFileTypes: true });
+    const items = entries.map((entry) => {
+      const fullPath = path.join(targetDir, entry.name);
+      const stats = fs.statSync(fullPath);
+      const relativePath = path.relative(DATA_DIR, fullPath);
+      return {
+        name: entry.name,
+        path: relativePath,
+        size: entry.isDirectory() ? 0 : stats.size,
+        isFolder: entry.isDirectory(),
+        modified: stats.mtime,
+      };
+    });
+
+    items.sort((a, b) => {
+      if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    return items;
+  } catch (e) {
+    console.error("Error listing files:", e);
+    return reply.status(500).send({ error: "Failed to list files" });
+  }
+});
+
+// Rename file or folder
+app.post("/api/files/rename", async (request, reply) => {
+  const { oldPath, newPath } = request.body;
+
+  if (!oldPath || !newPath) {
+    return reply.status(400).send({ error: "oldPath and newPath are required" });
+  }
+
+  if (!isPathSafe(oldPath) || !isPathSafe(newPath)) {
+    return reply.status(403).send({ error: "Access denied" });
+  }
+
+  const oldFullPath = path.resolve(DATA_DIR, oldPath);
+  const newFullPath = path.resolve(DATA_DIR, newPath);
+
+  if (!fs.existsSync(oldFullPath)) {
+    return reply.status(404).send({ error: "File or folder not found" });
+  }
+
+  try {
+    fs.renameSync(oldFullPath, newFullPath);
+    return { success: true };
+  } catch (e) {
+    console.error("Error renaming:", e);
+    return reply.status(500).send({ error: "Failed to rename" });
+  }
+});
+
+// Delete file or folder
+app.delete("/api/files/:path", async (request, reply) => {
+  const targetPath = request.params.path;
+
+  if (!isPathSafe(targetPath)) {
+    return reply.status(403).send({ error: "Access denied" });
+  }
+
+  const fullPath = path.resolve(DATA_DIR, targetPath);
+
+  if (!fs.existsSync(fullPath)) {
+    return reply.status(404).send({ error: "File or folder not found" });
+  }
+
+  try {
+    fs.rmSync(fullPath, { recursive: true });
+    return { success: true };
+  } catch (e) {
+    console.error("Error deleting:", e);
+    return reply.status(500).send({ error: "Failed to delete" });
+  }
+});
 
 // WebSocket terminal handler
 app.get("/ws/terminal", { websocket: true }, (socket, req) => {
@@ -231,7 +329,9 @@ app.get("/ws/terminal", { websocket: true }, (socket, req) => {
           ptyProcess.write(msg.data);
           break;
         case "resize":
-          ptyProcess.resize(msg.cols || 80, msg.rows || 24);
+          const cols = parseInt(msg.cols) || 80;
+          const rows = parseInt(msg.rows) || 24;
+          ptyProcess.resize(Math.max(1, cols), Math.max(1, rows));
           break;
         case "ping":
           socket.send(JSON.stringify({ type: "pong" }));
@@ -256,6 +356,15 @@ app.get("/ws/terminal", { websocket: true }, (socket, req) => {
 app.get("/terminal", async (request, reply) => {
   const terminalHtml = path.join(__dirname, "terminal.html");
   return reply.type("text/html").send(fs.readFileSync(terminalHtml, "utf-8"));
+});
+
+// File Manager - served by React app (SPA fallback)
+app.get("/manager", async (request, reply) => {
+  const indexHtml = path.join(clientBuildPath, "index.html");
+  if (fs.existsSync(indexHtml)) {
+    return reply.type("text/html").send(fs.readFileSync(indexHtml, "utf-8"));
+  }
+  return reply.redirect("/");
 });
 
 // Start server
