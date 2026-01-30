@@ -15,6 +15,9 @@ image = (
         "imagemagick",
         "libmagic1",
         "wget",
+        # node-pty build dependencies
+        "build-essential",
+        "python3",
     )
     .run_commands(
         # Install Node.js (latest LTS)

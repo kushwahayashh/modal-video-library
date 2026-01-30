@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Modal Terminal</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+  <!-- xterm.js -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js"></script>
+
+  <style>
+    :root {
+      --bg-primary: #121212;
+      --bg-secondary: #1a1a1a;
+      --bg-tertiary: #242424;
+      --bg-hover: #2a2a2a;
+      --border-subtle: rgba(255, 255, 255, 0.15);
+      --text-primary: #ffffff;
+      --text-secondary: #c0c0c0;
+      --text-muted: #808080;
+      --success: #4ade80;
+      --warning: #fbbf24;
+      --error: #f87171;
+      --font-mono: 'Space Mono', monospace;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      font-family: var(--font-mono);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .app-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    .app-header {
+      height: 48px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      flex-shrink: 0;
+    }
+
+    .header-title {
+      font-size: 0.9rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-btn {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--bg-tertiary);
+      border: none;
+      color: var(--text-primary);
+      font-size: 0.7rem;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: background 120ms ease;
+    }
+
+    .header-btn:hover {
+      background: var(--bg-hover);
+    }
+
+    .header-btn.visible {
+      display: flex;
+    }
+
+    .connection-badge {
+      padding: 6px 10px;
+      background: var(--bg-tertiary);
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .status-connecting {
+      color: var(--warning);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .status-connected {
+      color: var(--success);
+    }
+
+    .status-disconnected {
+      color: var(--error);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .terminal-wrapper {
+      flex: 1;
+      overflow: hidden;
+      background: var(--bg-primary);
+    }
+
+    #terminal {
+      width: 100%;
+      height: 100%;
+    }
+
+    .xterm {
+      padding: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <div class="header-title">Modal Terminal</div>
+      <div class="header-right">
+        <button id="reconnect-btn" class="header-btn" onclick="reconnect()">Reconnect</button>
+        <div class="connection-badge">
+          <span id="connection-status">Connecting...</span>
+        </div>
+      </div>
+    </header>
+    <div class="terminal-wrapper">
+      <div id="terminal"></div>
+    </div>
+  </div>
+
+  <script>
+    let terminal;
+    let fitAddon;
+    let socket;
+    let pingInterval;
+
+    function updateStatus(status) {
+      const el = document.getElementById('connection-status');
+      const btn = document.getElementById('reconnect-btn');
+
+      el.classList.remove('status-connecting', 'status-connected', 'status-disconnected');
+
+      if (status === 'connecting') {
+        el.textContent = 'Connecting...';
+        el.classList.add('status-connecting');
+        btn.classList.remove('visible');
+      } else if (status === 'connected') {
+        el.textContent = 'Online';
+        el.classList.add('status-connected');
+        btn.classList.remove('visible');
+      } else {
+        el.textContent = 'Offline';
+        el.classList.add('status-disconnected');
+        btn.classList.add('visible');
+      }
+    }
+
+    function connect() {
+      updateStatus('connecting');
+
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws/terminal`;
+
+      try {
+        socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+          updateStatus('connected');
+
+          const { cols, rows } = terminal;
+          socket.send(JSON.stringify({ type: 'resize', cols, rows }));
+
+          pingInterval = setInterval(() => {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ type: 'ping' }));
+            }
+          }, 30000);
+        };
+
+        socket.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'output') {
+              terminal.write(msg.data);
+            } else if (msg.type === 'error') {
+              terminal.writeln(`\r\n\x1b[31mError: ${msg.message}\x1b[0m\r\n`);
+            }
+          } catch {
+            terminal.write(event.data);
+          }
+        };
+
+        socket.onclose = (event) => {
+          updateStatus('disconnected');
+
+          if (pingInterval) {
+            clearInterval(pingInterval);
+            pingInterval = null;
+          }
+
+          if (!event.wasClean) {
+            terminal.writeln('\r\n\x1b[33mDisconnected from server.\x1b[0m');
+          }
+        };
+
+        socket.onerror = (error) => {
+          console.error('WebSocket error:', error);
+        };
+
+      } catch (e) {
+        terminal.writeln(`\r\n\x1b[31mConnection failed: ${e.message}\x1b[0m`);
+        updateStatus('disconnected');
+      }
+    }
+
+    function reconnect() {
+      if (socket) {
+        socket.onclose = null;
+        socket.onerror = null;
+        socket.onmessage = null;
+        socket.close();
+        socket = null;
+      }
+
+      if (pingInterval) {
+        clearInterval(pingInterval);
+        pingInterval = null;
+      }
+
+      connect();
+    }
+
+    function initTerminal() {
+      terminal = new Terminal({
+        cursorBlink: true,
+        cursorStyle: 'bar',
+        fontSize: 14,
+        fontFamily: '"Space Mono", monospace',
+        lineHeight: 1.0,
+        theme: {
+          background: '#121212',
+          foreground: '#f0f0f0',
+          cursor: '#f0f0f0',
+          cursorAccent: '#121212',
+          selectionBackground: '#ffffff33',
+          black: '#1a1a1a',
+          red: '#f87171',
+          green: '#4ade80',
+          yellow: '#fbbf24',
+          blue: '#60a5fa',
+          magenta: '#c084fc',
+          cyan: '#22d3ee',
+          white: '#e5e5e5',
+          brightBlack: '#404040',
+          brightRed: '#fca5a5',
+          brightGreen: '#86efac',
+          brightYellow: '#fde047',
+          brightBlue: '#93c5fd',
+          brightMagenta: '#d8b4fe',
+          brightCyan: '#67e8f9',
+          brightWhite: '#e5e5e5',
+        },
+        allowProposedApi: true,
+      });
+
+      fitAddon = new FitAddon.FitAddon();
+      terminal.loadAddon(fitAddon);
+      terminal.loadAddon(new WebLinksAddon.WebLinksAddon());
+
+      terminal.open(document.getElementById('terminal'));
+      fitAddon.fit();
+
+      terminal.onData((data) => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: 'input', data }));
+        }
+      });
+
+      terminal.onResize(({ cols, rows }) => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: 'resize', cols, rows }));
+        }
+      });
+
+      window.addEventListener('resize', () => {
+        fitAddon.fit();
+      });
+
+      terminal.focus();
+      connect();
+    }
+
+    document.addEventListener('DOMContentLoaded', initTerminal);
+  </script>
+</body>
+</html>

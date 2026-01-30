@@ -1,66 +1,75 @@
 import { useState, useEffect } from "react";
+import "./App.css";
 
 function App() {
-  const [info, setInfo] = useState(null);
-  const [health, setHealth] = useState(null);
+  const [videos, setVideos] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/health")
+    fetch("/api/videos")
       .then((r) => r.json())
-      .then(setHealth)
-      .catch(console.error);
-
-    fetch("/api/info")
-      .then((r) => r.json())
-      .then(setInfo)
-      .catch(console.error);
+      .then((data) => {
+        setVideos(data.videos || []);
+        setLoading(false);
+      })
+      .catch(() => {
+        setVideos([]);
+        setLoading(false);
+      });
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
-      <div className="container mx-auto px-4 py-16">
-        <h1 className="text-4xl font-bold mb-8">Video Library</h1>
-
-        <div className="grid gap-6 md:grid-cols-2">
-          <div className="bg-gray-800 rounded-lg p-6">
-            <h2 className="text-xl font-semibold mb-4">Health Status</h2>
-            {health ? (
-              <div className="space-y-2">
-                <p>
-                  Status:{" "}
-                  <span className="text-green-400">{health.status}</span>
-                </p>
-                <p className="text-gray-400 text-sm">{health.timestamp}</p>
-              </div>
-            ) : (
-              <p className="text-gray-400">Loading...</p>
-            )}
+    <div className="app">
+      <nav className="nav">
+        <div className="container nav-content">
+          <div className="nav-logo">
+            VIDEO<span>LIB</span>
           </div>
-
-          <div className="bg-gray-800 rounded-lg p-6">
-            <h2 className="text-xl font-semibold mb-4">App Info</h2>
-            {info ? (
-              <div className="space-y-2">
-                <p>
-                  {info.name} v{info.version}
-                </p>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {info.tools.map((tool) => (
-                    <span
-                      key={tool}
-                      className="px-2 py-1 bg-gray-700 rounded text-sm"
-                    >
-                      {tool}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <p className="text-gray-400">Loading...</p>
-            )}
+          <div className="nav-links">
+            <a href="/">Library</a>
+            <a href="/downloads">Downloads</a>
+          </div>
+          <div className="nav-right">
+            <button className="nav-btn" onClick={() => window.open('/terminal', '_blank')}>
+              Terminal
+            </button>
+            <button className="nav-btn">Upload</button>
           </div>
         </div>
-      </div>
+      </nav>
+
+      <main className="main">
+        <div className="container">
+          {loading ? (
+            <div className="loading">Loading videos...</div>
+          ) : videos.length === 0 ? (
+            <div className="empty">
+              <div className="empty-icon">📁</div>
+              <h2>No videos yet</h2>
+              <p>Upload or download videos to get started</p>
+            </div>
+          ) : (
+            <div className="video-grid">
+              {videos.map((video) => (
+                <div key={video.id} className="video-card">
+                  <div className="video-thumbnail">
+                    {video.thumbnail ? (
+                      <img src={video.thumbnail} alt={video.title} />
+                    ) : (
+                      <div className="video-placeholder">▶</div>
+                    )}
+                    {video.duration && <div className="video-duration">{video.duration}</div>}
+                  </div>
+                  <div className="video-info">
+                    <h3 className="video-title">{video.title}</h3>
+                    <p className="video-meta">{video.size || "Unknown size"}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 }
