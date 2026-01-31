@@ -4,149 +4,115 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Modal Terminal</title>
+  <title>Terminal</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='4 17 10 11 4 5'/%3E%3Cline x1='12' x2='20' y1='19' y2='19'/%3E%3C/svg%3E">
 
-  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 
-  <!-- xterm.js -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
-  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-canvas@0.5.0/lib/xterm-addon-canvas.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-webgl@0.18.0/lib/addon-webgl.min.js"></script>
 
   <style>
     :root {
-      --bg-primary: #121212;
-      --bg-secondary: #1a1a1a;
-      --bg-tertiary: #242424;
-      --bg-hover: #2a2a2a;
-      --border-subtle: rgba(255, 255, 255, 0.15);
-      --text-primary: #ffffff;
-      --text-secondary: #c0c0c0;
-      --text-muted: #808080;
+      --bg-primary: #0a0a0a;
+      --bg-secondary: #141414;
+      --bg-tertiary: #1e1e1e;
+      --bg-hover: #282828;
+      --border: rgba(255, 255, 255, 0.1);
+      --text-primary: #e4e4e4;
+      --text-muted: #707070;
       --success: #4ade80;
       --warning: #fbbf24;
       --error: #f87171;
-      --font-mono: 'Space Mono', monospace;
     }
 
-    *,
-    *::before,
-    *::after {
+    * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
     }
 
-    html,
-    body {
-      width: 100vw;
-      height: 100vh;
+    html, body {
+      width: 100%;
+      height: 100%;
       overflow: hidden;
-      font-family: var(--font-mono);
+      font-family: 'Space Mono', monospace;
       background: var(--bg-primary);
       color: var(--text-primary);
       -webkit-font-smoothing: antialiased;
     }
 
-    .app-container {
+    .app {
       display: flex;
       flex-direction: column;
-      height: 100vh;
-      width: 100vw;
+      height: 100%;
     }
 
-    .app-header {
-      height: 48px;
+    .header {
+      height: 40px;
       background: var(--bg-secondary);
-      border-bottom: 1px solid var(--border-subtle);
+      border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 20px;
+      padding: 0 16px;
       flex-shrink: 0;
     }
 
     .header-title {
-      font-size: 0.9rem;
-      font-weight: 700;
+      font-size: 0.8rem;
+      font-weight: 600;
       letter-spacing: 0.02em;
     }
 
     .header-right {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
     }
 
-    .header-btn {
-      display: none;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
+    .btn {
+      padding: 5px 10px;
       background: var(--bg-tertiary);
-      border: none;
+      border: 1px solid var(--border);
       color: var(--text-primary);
       font-size: 0.7rem;
-      font-family: var(--font-mono);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
+      font-family: inherit;
+      font-weight: 500;
       cursor: pointer;
-      transition: background 120ms ease;
+      transition: background 0.15s;
+      display: none;
     }
 
-    .header-btn:hover {
+    .btn:hover {
       background: var(--bg-hover);
     }
 
-    .header-btn.visible {
-      display: flex;
+    .btn.visible {
+      display: block;
     }
 
-    .connection-badge {
-      padding: 6px 10px;
-      background: var(--bg-tertiary);
-      font-size: 0.7rem;
+    .status {
+      padding: 4px 8px;
+      font-size: 0.65rem;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.04em;
     }
 
-    .status-connecting {
-      color: var(--warning);
-      animation: pulse 1.5s ease-in-out infinite;
-    }
+    .status.connecting { color: var(--warning); }
+    .status.connected { color: var(--success); }
+    .status.disconnected { color: var(--error); }
 
-    .status-connected {
-      color: var(--success);
-    }
-
-    .status-disconnected {
-      color: var(--error);
-    }
-
-    @keyframes pulse {
-
-      0%,
-      100% {
-        opacity: 1;
-      }
-
-      50% {
-        opacity: 0.5;
-      }
-    }
-
-    .terminal-wrapper {
+    .terminal-container {
       flex: 1;
       overflow: hidden;
       background: var(--bg-primary);
-      padding: 8px;
     }
 
     #terminal {
@@ -155,210 +121,266 @@
     }
 
     .xterm {
-      /* Padding moved to container for correct fit-addon calculation */
+      padding: 8px;
+      height: 100%;
+    }
+
+    .xterm-viewport::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .xterm-viewport::-webkit-scrollbar-track {
+      background: var(--bg-primary);
+    }
+
+    .xterm-viewport::-webkit-scrollbar-thumb {
+      background: var(--bg-tertiary);
     }
   </style>
 </head>
 
 <body>
-  <div class="app-container">
-    <header class="app-header">
-      <div class="header-title">Modal Terminal</div>
+  <div class="app">
+    <header class="header">
+      <div class="header-title">Terminal</div>
       <div class="header-right">
-        <button id="reconnect-btn" class="header-btn" onclick="reconnect()">Reconnect</button>
-        <div class="connection-badge">
-          <span id="connection-status">Connecting...</span>
-        </div>
+        <button class="btn visible" onclick="clearAndRedraw()">Clear</button>
+        <button id="reconnect-btn" class="btn" onclick="reconnect()">Reconnect</button>
+        <div id="status" class="status connecting">Connecting</div>
       </div>
     </header>
-    <div class="terminal-wrapper">
+    <div class="terminal-container">
       <div id="terminal"></div>
     </div>
   </div>
 
   <script>
-    let terminal;
-    let fitAddon;
-    let socket;
-    let pingInterval;
-    let resizeTimeout;
+    const RECONNECT_DELAY = 2000;
+    const PING_INTERVAL = 25000;
+    const RESIZE_DEBOUNCE = 100;
 
-    function updateStatus(status) {
-      const el = document.getElementById('connection-status');
+    let term = null;
+    let fitAddon = null;
+    let ws = null;
+    let pingTimer = null;
+    let resizeTimer = null;
+    let isConnected = false;
+
+    function setStatus(state) {
+      const el = document.getElementById('status');
       const btn = document.getElementById('reconnect-btn');
+      
+      el.className = 'status ' + state;
+      el.textContent = state === 'connecting' ? 'Connecting' : 
+                       state === 'connected' ? 'Connected' : 'Disconnected';
+      
+      btn.classList.toggle('visible', state === 'disconnected');
+    }
 
-      el.classList.remove('status-connecting', 'status-connected', 'status-disconnected');
-
-      if (status === 'connecting') {
-        el.textContent = 'Connecting...';
-        el.classList.add('status-connecting');
-        btn.classList.remove('visible');
-      } else if (status === 'connected') {
-        el.textContent = 'Online';
-        el.classList.add('status-connected');
-        btn.classList.remove('visible');
-      } else {
-        el.textContent = 'Offline';
-        el.classList.add('status-disconnected');
-        btn.classList.add('visible');
+    function sendMessage(type, data = {}) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type, ...data }));
       }
+    }
+
+    function doFit() {
+      if (!fitAddon || !term) return;
+      
+      try {
+        fitAddon.fit();
+        
+        if (isConnected) {
+          sendMessage('resize', { cols: term.cols, rows: term.rows });
+        }
+      } catch (e) {
+        console.warn('Fit error:', e);
+      }
+    }
+
+    function scheduleFit() {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(doFit, RESIZE_DEBOUNCE);
     }
 
     function connect() {
-      updateStatus('connecting');
-
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws/terminal`;
-
-      try {
-        socket = new WebSocket(wsUrl);
-
-        socket.onopen = () => {
-          updateStatus('connected');
-
-          // Force a fit calculation to ensure we have the correct dimensions
-          // before sending the initial resize command
-          try {
-            fitAddon.fit();
-          } catch (e) {
-            console.warn('Fit error on connect:', e);
-          }
-
-          const { cols, rows } = terminal;
-          socket.send(JSON.stringify({ type: 'resize', cols, rows }));
-
-          pingInterval = setInterval(() => {
-            if (socket && socket.readyState === WebSocket.OPEN) {
-              socket.send(JSON.stringify({ type: 'ping' }));
-            }
-          }, 30000);
-        };
-
-        socket.onmessage = (event) => {
-          try {
-            const msg = JSON.parse(event.data);
-            if (msg.type === 'output') {
-              terminal.write(msg.data);
-            } else if (msg.type === 'error') {
-              terminal.writeln(`\r\n\x1b[31mError: ${msg.message}\x1b[0m\r\n`);
-            }
-          } catch {
-            terminal.write(event.data);
-          }
-        };
-
-        socket.onclose = (event) => {
-          updateStatus('disconnected');
-
-          if (pingInterval) {
-            clearInterval(pingInterval);
-            pingInterval = null;
-          }
-
-          if (!event.wasClean) {
-            terminal.writeln('\r\n\x1b[33mDisconnected from server.\x1b[0m');
-          }
-        };
-
-        socket.onerror = (error) => {
-          console.error('WebSocket error:', error);
-        };
-
-      } catch (e) {
-        terminal.writeln(`\r\n\x1b[31mConnection failed: ${e.message}\x1b[0m`);
-        updateStatus('disconnected');
+      if (ws) {
+        ws.onclose = null;
+        ws.onerror = null;
+        ws.onmessage = null;
+        ws.close();
+        ws = null;
       }
+
+      clearInterval(pingTimer);
+      isConnected = false;
+      setStatus('connecting');
+
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${location.host}/ws/terminal`);
+      ws.binaryType = 'arraybuffer';
+
+      ws.onopen = () => {
+        isConnected = true;
+        setStatus('connected');
+        
+        // Send initial size immediately and after a short delay to ensure sync
+        doFit();
+        setTimeout(doFit, 50);
+        setTimeout(doFit, 200);
+        
+        // Start ping interval
+        pingTimer = setInterval(() => sendMessage('ping'), PING_INTERVAL);
+      };
+
+      ws.onmessage = (e) => {
+        let msg;
+        
+        try {
+          const text = typeof e.data === 'string' ? e.data : new TextDecoder().decode(e.data);
+          msg = JSON.parse(text);
+        } catch {
+          // Raw data fallback
+          term.write(typeof e.data === 'string' ? e.data : new TextDecoder().decode(e.data));
+          return;
+        }
+
+        switch (msg.type) {
+          case 'output':
+            term.write(msg.data);
+            break;
+          case 'exit':
+            term.writeln('\r\n\x1b[90m[Process exited]\x1b[0m');
+            break;
+        }
+      };
+
+      ws.onclose = (e) => {
+        isConnected = false;
+        clearInterval(pingTimer);
+        setStatus('disconnected');
+        
+        if (!e.wasClean) {
+          term.writeln('\r\n\x1b[33mConnection lost\x1b[0m');
+        }
+      };
+
+      ws.onerror = (e) => {
+        console.error('WebSocket error:', e);
+      };
     }
 
     function reconnect() {
-      if (socket) {
-        socket.onclose = null;
-        socket.onerror = null;
-        socket.onmessage = null;
-        socket.close();
-        socket = null;
-      }
-
-      if (pingInterval) {
-        clearInterval(pingInterval);
-        pingInterval = null;
-      }
-
+      term.clear();
       connect();
     }
 
-    function initTerminal() {
-      terminal = new Terminal({
+    function clearAndRedraw() {
+      term.clear();
+      // Send Ctrl+L to shell to redraw prompt
+      sendMessage('input', { data: '\x0c' });
+      term.focus();
+    }
+
+    function init() {
+      // Create terminal with proper settings
+      term = new Terminal({
         cursorBlink: true,
         cursorStyle: 'bar',
+        cursorInactiveStyle: 'outline',
         fontSize: 14,
-        fontFamily: '"Space Mono", monospace',
-        lineHeight: 1.0,
+        fontFamily: '"Space Mono", "Menlo", "Monaco", "Courier New", monospace',
+        fontWeight: '400',
+        fontWeightBold: '700',
+        lineHeight: 1.1,
+        letterSpacing: 0,
+        scrollback: 10000,
+        scrollOnUserInput: true,
+        smoothScrollDuration: 0,
         theme: {
-          background: '#121212',
-          foreground: '#f0f0f0',
-          cursor: '#f0f0f0',
-          cursorAccent: '#121212',
-          selectionBackground: '#ffffff33',
-          black: '#1a1a1a',
+          background: '#0a0a0a',
+          foreground: '#e4e4e4',
+          cursor: '#e4e4e4',
+          cursorAccent: '#0a0a0a',
+          selectionBackground: 'rgba(255, 255, 255, 0.2)',
+          selectionForeground: '#ffffff',
+          black: '#0a0a0a',
           red: '#f87171',
           green: '#4ade80',
           yellow: '#fbbf24',
           blue: '#60a5fa',
           magenta: '#c084fc',
           cyan: '#22d3ee',
-          white: '#e5e5e5',
-          brightBlack: '#404040',
+          white: '#e4e4e4',
+          brightBlack: '#525252',
           brightRed: '#fca5a5',
           brightGreen: '#86efac',
           brightYellow: '#fde047',
           brightBlue: '#93c5fd',
           brightMagenta: '#d8b4fe',
           brightCyan: '#67e8f9',
-          brightWhite: '#e5e5e5',
+          brightWhite: '#ffffff',
         },
         allowProposedApi: true,
+        windowsMode: false,
+        convertEol: false,
       });
 
+      // Load addons
       fitAddon = new FitAddon.FitAddon();
-      terminal.loadAddon(fitAddon);
-      terminal.loadAddon(new WebLinksAddon.WebLinksAddon());
-      terminal.loadAddon(new CanvasAddon.CanvasAddon());
+      term.loadAddon(fitAddon);
+      term.loadAddon(new WebLinksAddon.WebLinksAddon());
+      
+      // Try WebGL renderer for better performance
+      try {
+        term.loadAddon(new WebglAddon.WebglAddon());
+      } catch (e) {
+        console.warn('WebGL addon failed, using canvas renderer');
+      }
 
-      terminal.open(document.getElementById('terminal'));
-      fitAddon.fit();
+      // Open terminal
+      const container = document.getElementById('terminal');
+      term.open(container);
 
-      terminal.onData((data) => {
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ type: 'input', data }));
+      // Initial fit after render
+      requestAnimationFrame(() => {
+        doFit();
+      });
+
+      // Handle input
+      term.onData((data) => {
+        sendMessage('input', { data });
+      });
+
+      // Handle resize from terminal
+      term.onResize(({ cols, rows }) => {
+        if (isConnected) {
+          sendMessage('resize', { cols, rows });
         }
       });
 
-      terminal.onResize(({ cols, rows }) => {
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ type: 'resize', cols, rows }));
+      // Observe container resize
+      const resizeObserver = new ResizeObserver(scheduleFit);
+      resizeObserver.observe(container);
+      
+      // Window resize fallback
+      window.addEventListener('resize', scheduleFit);
+
+      // Focus terminal
+      term.focus();
+
+      // Handle visibility change to refocus
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          term.focus();
+          scheduleFit();
         }
       });
 
-      // Debounced resize handler
-      const debouncedFit = () => {
-        clearTimeout(resizeTimeout);
-        resizeTimeout = setTimeout(() => fitAddon.fit(), 250);
-      };
-
-      // ResizeObserver for container-specific resize detection
-      const terminalContainer = document.getElementById('terminal');
-      const resizeObserver = new ResizeObserver(debouncedFit);
-      resizeObserver.observe(terminalContainer);
-
-      // Fallback for window resize
-      window.addEventListener('resize', debouncedFit);
-
-      terminal.focus();
+      // Connect
       connect();
     }
 
-    document.addEventListener('DOMContentLoaded', initTerminal);
+    document.addEventListener('DOMContentLoaded', init);
   </script>
 </body>
 

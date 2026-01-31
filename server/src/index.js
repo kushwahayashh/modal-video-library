@@ -295,61 +295,99 @@ app.delete("/api/files/:path", async (request, reply) => {
 app.get("/ws/terminal", { websocket: true }, (socket, req) => {
   const shell = process.env.SHELL || "/bin/bash";
   const cwd = fs.existsSync(DATA_DIR) ? DATA_DIR : process.cwd();
+  
+  let ptyProcess = null;
+  let isAlive = true;
 
-  const ptyProcess = pty.spawn(shell, [], {
-    name: "xterm-256color",
-    cols: 80,
-    rows: 24,
-    cwd: cwd,
-    env: { ...process.env, TERM: "xterm-256color" },
-  });
+  const send = (type, data = {}) => {
+    if (isAlive && socket.readyState === 1) {
+      try {
+        socket.send(JSON.stringify({ type, ...data }));
+      } catch (e) {
+        // Ignore send errors
+      }
+    }
+  };
 
+  const cleanup = () => {
+    isAlive = false;
+    if (ptyProcess) {
+      try {
+        ptyProcess.kill();
+      } catch (e) {
+        // Already dead
+      }
+      ptyProcess = null;
+    }
+  };
+
+  // Spawn PTY with proper settings
+  try {
+    ptyProcess = pty.spawn(shell, [], {
+      name: "xterm-256color",
+      cols: 80,
+      rows: 24,
+      cwd: cwd,
+      env: {
+        ...process.env,
+        TERM: "xterm-256color",
+        COLORTERM: "truecolor",
+        LANG: process.env.LANG || "en_US.UTF-8",
+      },
+      encoding: "utf8",
+    });
+  } catch (e) {
+    send("error", { message: "Failed to spawn shell: " + e.message });
+    socket.close();
+    return;
+  }
+
+  // Handle PTY output
   ptyProcess.onData((data) => {
-    try {
-      socket.send(JSON.stringify({ type: "output", data }));
-    } catch (e) {
-      // Socket closed
-    }
+    send("output", { data });
   });
 
-  ptyProcess.onExit(({ exitCode }) => {
-    try {
-      socket.send(JSON.stringify({ type: "exit", code: exitCode }));
-      socket.close();
-    } catch (e) {
-      // Socket already closed
-    }
+  // Handle PTY exit
+  ptyProcess.onExit(({ exitCode, signal }) => {
+    send("exit", { code: exitCode, signal });
+    socket.close();
   });
 
-  socket.on("message", (message) => {
+  // Handle incoming messages
+  socket.on("message", (raw) => {
+    if (!ptyProcess) return;
+
     try {
-      const msg = JSON.parse(message.toString());
+      const msg = JSON.parse(raw.toString());
+      
       switch (msg.type) {
         case "input":
-          ptyProcess.write(msg.data);
+          if (typeof msg.data === "string") {
+            ptyProcess.write(msg.data);
+          }
           break;
+          
         case "resize":
-          const cols = parseInt(msg.cols) || 80;
-          const rows = parseInt(msg.rows) || 24;
-          ptyProcess.resize(Math.max(1, cols), Math.max(1, rows));
+          const cols = Math.max(1, Math.min(500, parseInt(msg.cols) || 80));
+          const rows = Math.max(1, Math.min(200, parseInt(msg.rows) || 24));
+          try {
+            ptyProcess.resize(cols, rows);
+          } catch (e) {
+            // Ignore resize errors
+          }
           break;
+          
         case "ping":
-          socket.send(JSON.stringify({ type: "pong" }));
+          send("pong");
           break;
       }
     } catch (e) {
-      console.error("Terminal message error:", e);
+      // Ignore parse errors
     }
   });
 
-  socket.on("close", () => {
-    ptyProcess.kill();
-  });
-
-  socket.on("error", (err) => {
-    console.error("Terminal socket error:", err);
-    ptyProcess.kill();
-  });
+  socket.on("close", cleanup);
+  socket.on("error", cleanup);
 });
 
 // Terminal HTML page
