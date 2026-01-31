@@ -1,25 +1,75 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { Search } from "lucide-react";
 import Plyr from "plyr";
 import "plyr/dist/plyr.css";
 import "./App.css";
+import type { Video } from "./types";
+
+interface VideoCardProps {
+  video: Video;
+  onClick: () => void;
+}
+
+function VideoCard({ video, onClick }: VideoCardProps) {
+  const [isVisible, setIsVisible] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "100px" }
+    );
+
+    if (cardRef.current) {
+      observer.observe(cardRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={cardRef} className="video-card" onClick={onClick}>
+      <div className="video-thumbnail">
+        {isVisible ? (
+          video.thumbnail ? (
+            <img src={video.thumbnail} alt={video.title} loading="lazy" />
+          ) : (
+            <div className="video-placeholder"></div>
+          )
+        ) : (
+          <div className="video-placeholder skeleton"></div>
+        )}
+        {video.duration && <div className="video-duration">{video.duration}</div>}
+      </div>
+      <div className="video-info">
+        <h3 className="video-title">{video.title}</h3>
+        <p className="video-meta">{video.size || "Unknown size"}</p>
+      </div>
+    </div>
+  );
+}
 
 function App() {
-  const [videos, setVideos] = useState([]);
+  const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedVideo, setSelectedVideo] = useState(null);
+  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [search, setSearch] = useState("");
-  const videoRef = useRef(null);
-  const playerRef = useRef(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const playerRef = useRef<Plyr | null>(null);
 
-  const openModal = (video) => {
+  const openModal = (video: Video) => {
     setSelectedVideo(video);
     setTimeout(() => setModalVisible(true), 10);
   };
 
-  const closeModal = () => {
+  const closeModal = useCallback(() => {
     setModalVisible(false);
     setTimeout(() => {
       if (playerRef.current) {
@@ -28,7 +78,18 @@ function App() {
       }
       setSelectedVideo(null);
     }, 300);
-  };
+  }, []);
+
+  // ESC key to close modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && selectedVideo) {
+        closeModal();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedVideo, closeModal]);
 
   useEffect(() => {
     if (selectedVideo && videoRef.current && !playerRef.current) {
@@ -98,20 +159,7 @@ function App() {
               {videos
                 .filter((v) => v.title.toLowerCase().includes(search.toLowerCase()))
                 .map((video) => (
-                <div key={video.id} className="video-card" onClick={() => openModal(video)}>
-                  <div className="video-thumbnail">
-                    {video.thumbnail ? (
-                      <img src={video.thumbnail} alt={video.title} />
-                    ) : (
-                      <div className="video-placeholder"></div>
-                    )}
-                    {video.duration && <div className="video-duration">{video.duration}</div>}
-                  </div>
-                  <div className="video-info">
-                    <h3 className="video-title">{video.title}</h3>
-                    <p className="video-meta">{video.size || "Unknown size"}</p>
-                  </div>
-                </div>
+                <VideoCard key={video.id} video={video} onClick={() => openModal(video)} />
               ))}
             </div>
           )}

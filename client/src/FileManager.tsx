@@ -1,29 +1,20 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, KeyboardEvent } from "react";
 import { Folder, File, Pencil, Trash2, FolderOpen } from "lucide-react";
+import { formatBytes, formatDate } from "./utils";
+import type { FileItem } from "./types";
 import "./FileManager.css";
 
-const formatSize = (bytes) => {
-  if (!bytes) return "-";
-  const units = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + " " + units[i];
-};
-
-const formatDate = (dateStr) => {
-  if (!dateStr) return "-";
-  const d = new Date(dateStr);
-  return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-};
+type ModalType = "rename" | "delete" | null;
 
 function FileManager() {
   const [currentPath, setCurrentPath] = useState("");
-  const [files, setFiles] = useState([]);
+  const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [modal, setModal] = useState(null);
+  const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
+  const [modal, setModal] = useState<ModalType>(null);
   const [renameValue, setRenameValue] = useState("");
 
-  const fetchFiles = useCallback(async (path) => {
+  const fetchFiles = useCallback(async (path: string) => {
     setLoading(true);
     try {
       const apiPath = path === "/" ? "" : path.replace(/^\//, "");
@@ -42,17 +33,17 @@ function FileManager() {
     fetchFiles(currentPath);
   }, [currentPath, fetchFiles]);
 
-  const navigateTo = (path) => setCurrentPath(path);
+  const navigateTo = (path: string) => setCurrentPath(path);
 
   const breadcrumbParts = currentPath.split("/").filter(Boolean);
 
-  const openRename = (file) => {
+  const openRename = (file: FileItem) => {
     setSelectedFile(file);
     setRenameValue(file.name);
     setModal("rename");
   };
 
-  const openDelete = (file) => {
+  const openDelete = (file: FileItem) => {
     setSelectedFile(file);
     setModal("delete");
   };
@@ -97,7 +88,7 @@ function FileManager() {
     }
   };
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") confirmRename();
     if (e.key === "Escape") closeModal();
   };
@@ -147,7 +138,7 @@ function FileManager() {
                   )}
                   <span className="fm-name-text">{file.name}</span>
                 </div>
-                <div className="fm-size">{file.isFolder ? "-" : formatSize(file.size)}</div>
+                <div className="fm-size">{file.isFolder ? "-" : formatBytes(file.size)}</div>
                 <div className="fm-date">{formatDate(file.modified)}</div>
                 <div className="fm-actions">
                   <button

@@ -3,6 +3,7 @@
 :root {
   --bg-primary: #0a0a0a;
   --bg-secondary: #111111;
+  --bg-tertiary: #1a1a1a;
   --bg-card: #161616;
   --bg-card-hover: #1a1a1a;
   --text-primary: #ffffff;
@@ -10,6 +11,10 @@
   --text-muted: #707070;
   --border: #222222;
   --accent: #ffffff;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --success: #4ade80;
+  --warning: #fbbf24;
 }
 
 * {
