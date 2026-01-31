@@ -45,9 +45,45 @@ const THUMBNAILS_DIR = path.join(DATA_DIR, "thumbnails");
   }
 });
 
+// Store Cloudflare tunnel URL in memory
+let cloudflareUrl = null;
+
 // Health check
 app.get("/api/health", async () => {
-  return { status: "ok", timestamp: new Date().toISOString() };
+  return { status: "ok", timestamp: new Date().toISOString(), cloudflareUrl };
+});
+
+// Set Cloudflare tunnel URL (called by startup script)
+app.post("/api/cf-url", async (request, reply) => {
+  const { url } = request.body || {};
+  if (!url || !url.includes("trycloudflare.com")) {
+    return reply.status(400).send({ error: "Invalid Cloudflare URL" });
+  }
+  cloudflareUrl = url.trim();
+  console.log("Cloudflare URL set:", cloudflareUrl);
+  return { success: true, url: cloudflareUrl };
+});
+
+// Get Cloudflare tunnel URL
+app.get("/api/cf-url", async (request, reply) => {
+  if (!cloudflareUrl) {
+    return reply.status(404).send({ error: "Cloudflare URL not set" });
+  }
+  
+  // If ?redirect=true, redirect to the URL
+  if (request.query.redirect === "true") {
+    return reply.redirect(cloudflareUrl);
+  }
+  
+  return { url: cloudflareUrl };
+});
+
+// Redirect endpoint - always redirects to Cloudflare URL if set
+app.get("/cf", async (request, reply) => {
+  if (!cloudflareUrl) {
+    return reply.status(404).send({ error: "Cloudflare URL not set. Tunnel not running?" });
+  }
+  return reply.redirect(cloudflareUrl);
 });
 
 // Get all videos
