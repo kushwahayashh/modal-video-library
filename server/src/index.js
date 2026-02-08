@@ -4,21 +4,21 @@ import fastifyStatic from "@fastify/static";
 import websocket from "@fastify/websocket";
 import path from "path";
 import fs from "fs";
+import { promises as fsp } from "fs";
 import { fileURLToPath } from "url";
-import { execSync } from "child_process";
-import pty from "node-pty";
+import { execFile } from "child_process";
+import { promisify } from "util";
+
+const execFileAsync = promisify(execFile);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const app = Fastify({ logger: true });
+const app = Fastify({ logger: true, routerOptions: { maxParamLength: 500 } });
 
-// Enable CORS for development
 await app.register(cors, { origin: true });
 
-// Register WebSocket plugin
 await app.register(websocket);
 
-// Serve static client build in production
 const clientBuildPath = path.join(__dirname, "../../client/dist");
 try {
   await app.register(fastifyStatic, {
@@ -29,12 +29,17 @@ try {
   // Client not built yet, that's fine for dev
 }
 
-// Data directory (Modal volume or local)
+function toBase64Url(str) {
+  return Buffer.from(str).toString("base64url");
+}
+function fromBase64Url(b64) {
+  return Buffer.from(b64, "base64url").toString("utf-8");
+}
+
 const DATA_DIR = process.env.DATA_DIR || "/data";
 const VIDEOS_DIR = path.join(DATA_DIR, "videos");
 const THUMBNAILS_DIR = path.join(DATA_DIR, "thumbnails");
 
-// Ensure directories exist
 [VIDEOS_DIR, THUMBNAILS_DIR].forEach((dir) => {
   if (!fs.existsSync(dir)) {
     try {
@@ -45,15 +50,76 @@ const THUMBNAILS_DIR = path.join(DATA_DIR, "thumbnails");
   }
 });
 
-// Store Cloudflare tunnel URL in memory
 let cloudflareUrl = null;
 
-// Health check
+const durationCache = new Map();
+
+async function fileExists(p) {
+  try {
+    await fsp.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function getVideoDuration(filePath) {
+  try {
+    const stats = await fsp.stat(filePath);
+    const cacheKey = `${filePath}:${stats.mtimeMs}`;
+    if (durationCache.has(cacheKey)) {
+      return durationCache.get(cacheKey);
+    }
+
+    const { stdout } = await execFileAsync("ffprobe", [
+      "-v", "error",
+      "-show_entries", "format=duration",
+      "-of", "default=noprint_wrappers=1:nokey=1",
+      filePath,
+    ], { timeout: 10000 });
+
+    const seconds = parseFloat(stdout.trim());
+    if (isNaN(seconds)) {
+      durationCache.set(cacheKey, null);
+      return null;
+    }
+
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+
+    let duration;
+    if (hrs > 0) {
+      duration = `${hrs}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    } else {
+      duration = `${mins}:${secs.toString().padStart(2, "0")}`;
+    }
+
+    durationCache.set(cacheKey, duration);
+    return duration;
+  } catch (e) {
+    return null;
+  }
+}
+
+function isPathSafe(targetPath) {
+  const resolvedData = path.resolve(DATA_DIR);
+  const resolved = path.resolve(DATA_DIR, targetPath);
+  return resolved === resolvedData || resolved.startsWith(resolvedData + path.sep);
+}
+
+function formatBytes(bytes) {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
+
 app.get("/api/health", async () => {
   return { status: "ok", timestamp: new Date().toISOString(), cloudflareUrl };
 });
 
-// Set Cloudflare tunnel URL (called by startup script)
 app.post("/api/cf-url", async (request, reply) => {
   const { url } = request.body || {};
   if (!url || !url.includes("trycloudflare.com")) {
@@ -64,21 +130,18 @@ app.post("/api/cf-url", async (request, reply) => {
   return { success: true, url: cloudflareUrl };
 });
 
-// Get Cloudflare tunnel URL
 app.get("/api/cf-url", async (request, reply) => {
   if (!cloudflareUrl) {
     return reply.status(404).send({ error: "Cloudflare URL not set" });
   }
-  
-  // If ?redirect=true, redirect to the URL
+
   if (request.query.redirect === "true") {
     return reply.redirect(cloudflareUrl);
   }
-  
+
   return { url: cloudflareUrl };
 });
 
-// Redirect endpoint - always redirects to Cloudflare URL if set
 app.get("/cf", async (request, reply) => {
   if (!cloudflareUrl) {
     return reply.status(404).send({ error: "Cloudflare URL not set. Tunnel not running?" });
@@ -86,55 +149,61 @@ app.get("/cf", async (request, reply) => {
   return reply.redirect(cloudflareUrl);
 });
 
-// Get all videos
 app.get("/api/videos", async () => {
   const videos = [];
 
   try {
-    if (fs.existsSync(VIDEOS_DIR)) {
-      const files = fs.readdirSync(VIDEOS_DIR);
+    if (await fileExists(VIDEOS_DIR)) {
+      const files = await fsp.readdir(VIDEOS_DIR);
       const videoExtensions = [".mp4", ".mkv", ".avi", ".webm", ".mov"];
 
+      const entries = [];
       for (const file of files) {
         const ext = path.extname(file).toLowerCase();
         if (videoExtensions.includes(ext)) {
           const filePath = path.join(VIDEOS_DIR, file);
-          const stats = fs.statSync(filePath);
-
-          videos.push({
-            id: Buffer.from(file).toString("base64"),
-            title: path.basename(file, ext),
-            filename: file,
-            size: formatBytes(stats.size),
-            sizeBytes: stats.size,
-            createdAt: stats.birthtime,
-            thumbnail: null,
-            duration: getVideoDuration(filePath),
-          });
+          const stats = await fsp.stat(filePath);
+          entries.push({ file, ext, filePath, stats });
         }
+      }
+
+      const durations = await Promise.all(
+        entries.map((e) => getVideoDuration(e.filePath))
+      );
+
+      for (let i = 0; i < entries.length; i++) {
+        const { file, ext, stats } = entries[i];
+        videos.push({
+          id: toBase64Url(file),
+          title: path.basename(file, ext),
+          filename: file,
+          size: formatBytes(stats.size),
+          sizeBytes: stats.size,
+          createdAt: stats.birthtime,
+          thumbnail: null,
+          duration: durations[i],
+        });
       }
     }
   } catch (e) {
     console.error("Error reading videos:", e);
   }
 
-  // Sort by newest first
   videos.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
   return { videos, total: videos.length };
 });
 
-// Get single video info
 app.get("/api/videos/:id", async (request, reply) => {
   const { id } = request.params;
-  const filename = Buffer.from(id, "base64").toString("utf-8");
+  const filename = fromBase64Url(id);
   const filePath = path.join(VIDEOS_DIR, filename);
 
-  if (!fs.existsSync(filePath)) {
+  if (!(await fileExists(filePath))) {
     return reply.status(404).send({ error: "Video not found" });
   }
 
-  const stats = fs.statSync(filePath);
+  const stats = await fsp.stat(filePath);
   const ext = path.extname(filename);
 
   return {
@@ -144,20 +213,77 @@ app.get("/api/videos/:id", async (request, reply) => {
     size: formatBytes(stats.size),
     sizeBytes: stats.size,
     createdAt: stats.birthtime,
+    modifiedAt: stats.mtime,
+    duration: await getVideoDuration(filePath),
   };
 });
 
-// Stream video
-app.get("/api/stream/:id", async (request, reply) => {
+app.post("/api/videos/:id/rename", async (request, reply) => {
   const { id } = request.params;
-  const filename = Buffer.from(id, "base64").toString("utf-8");
-  const filePath = path.join(VIDEOS_DIR, filename);
+  const { newName } = request.body;
 
-  if (!fs.existsSync(filePath)) {
+  if (!newName || typeof newName !== "string") {
+    return reply.status(400).send({ error: "newName is required" });
+  }
+
+  const oldFilename = fromBase64Url(id);
+  const oldPath = path.join(VIDEOS_DIR, oldFilename);
+
+  if (!(await fileExists(oldPath))) {
     return reply.status(404).send({ error: "Video not found" });
   }
 
-  const stats = fs.statSync(filePath);
+  const ext = path.extname(oldFilename);
+  const sanitizedName = newName.replace(/[<>:"/\\|?*]/g, "").trim();
+  if (!sanitizedName) {
+    return reply.status(400).send({ error: "Invalid name" });
+  }
+
+  const newFilename = sanitizedName + ext;
+  const newPath = path.join(VIDEOS_DIR, newFilename);
+
+  if ((await fileExists(newPath)) && newPath !== oldPath) {
+    return reply.status(409).send({ error: "A file with that name already exists" });
+  }
+
+  try {
+    await fsp.rename(oldPath, newPath);
+    const newId = toBase64Url(newFilename);
+    return { success: true, id: newId, filename: newFilename };
+  } catch (e) {
+    console.error("Error renaming video:", e);
+    return reply.status(500).send({ error: "Failed to rename video" });
+  }
+});
+
+app.delete("/api/videos/:id", async (request, reply) => {
+  const { id } = request.params;
+  const filename = fromBase64Url(id);
+  const filePath = path.join(VIDEOS_DIR, filename);
+
+  if (!(await fileExists(filePath))) {
+    return reply.status(404).send({ error: "Video not found" });
+  }
+
+  try {
+    await fsp.unlink(filePath);
+    return { success: true };
+  } catch (e) {
+    console.error("Error deleting video:", e);
+    return reply.status(500).send({ error: "Failed to delete video" });
+  }
+});
+
+app.get("/api/stream/:id", async (request, reply) => {
+  const { id } = request.params;
+  const filename = fromBase64Url(id);
+  const filePath = path.join(VIDEOS_DIR, filename);
+
+  if (!(await fileExists(filePath))) {
+    return reply.status(404).send({ error: "Video not found" });
+  }
+
+  const stats = await fsp.stat(filePath);
   const ext = path.extname(filename).toLowerCase();
 
   const mimeTypes = {
@@ -169,8 +295,17 @@ app.get("/api/stream/:id", async (request, reply) => {
   };
 
   const contentType = mimeTypes[ext] || "video/mp4";
+  const isDownload = request.query.download !== undefined;
 
-  // Handle range requests for video seeking
+  if (isDownload) {
+    reply.headers({
+      "Content-Disposition": `attachment; filename="${encodeURIComponent(filename)}"`,
+      "Content-Length": stats.size,
+      "Content-Type": "application/octet-stream",
+    });
+    return fs.createReadStream(filePath);
+  }
+
   const range = request.headers.range;
 
   if (range) {
@@ -198,44 +333,6 @@ app.get("/api/stream/:id", async (request, reply) => {
   return fs.createReadStream(filePath);
 });
 
-// Helper functions
-function formatBytes(bytes) {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-}
-
-function getVideoDuration(filePath) {
-  try {
-    const result = execSync(
-      `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`,
-      { encoding: "utf-8", timeout: 10000 }
-    );
-    const seconds = parseFloat(result.trim());
-    if (isNaN(seconds)) return null;
-
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-
-    if (hrs > 0) {
-      return `${hrs}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-    }
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  } catch (e) {
-    return null;
-  }
-}
-
-// File manager helper - check path is within DATA_DIR
-function isPathSafe(targetPath) {
-  const resolved = path.resolve(DATA_DIR, targetPath);
-  return resolved.startsWith(path.resolve(DATA_DIR));
-}
-
-// List files and folders
 app.get("/api/files", async (request, reply) => {
   const subPath = request.query.path || "";
 
@@ -245,24 +342,26 @@ app.get("/api/files", async (request, reply) => {
 
   const targetDir = path.resolve(DATA_DIR, subPath);
 
-  if (!fs.existsSync(targetDir)) {
+  if (!(await fileExists(targetDir))) {
     return reply.status(404).send({ error: "Directory not found" });
   }
 
   try {
-    const entries = fs.readdirSync(targetDir, { withFileTypes: true });
-    const items = entries.map((entry) => {
-      const fullPath = path.join(targetDir, entry.name);
-      const stats = fs.statSync(fullPath);
-      const relativePath = path.relative(DATA_DIR, fullPath);
-      return {
-        name: entry.name,
-        path: relativePath,
-        size: entry.isDirectory() ? 0 : stats.size,
-        isFolder: entry.isDirectory(),
-        modified: stats.mtime,
-      };
-    });
+    const entries = await fsp.readdir(targetDir, { withFileTypes: true });
+    const items = await Promise.all(
+      entries.map(async (entry) => {
+        const fullPath = path.join(targetDir, entry.name);
+        const stats = await fsp.stat(fullPath);
+        const relativePath = path.relative(DATA_DIR, fullPath);
+        return {
+          name: entry.name,
+          path: relativePath,
+          size: entry.isDirectory() ? 0 : stats.size,
+          isFolder: entry.isDirectory(),
+          modified: stats.mtime,
+        };
+      })
+    );
 
     items.sort((a, b) => {
       if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
@@ -276,7 +375,6 @@ app.get("/api/files", async (request, reply) => {
   }
 });
 
-// Rename file or folder
 app.post("/api/files/rename", async (request, reply) => {
   const { oldPath, newPath } = request.body;
 
@@ -291,12 +389,12 @@ app.post("/api/files/rename", async (request, reply) => {
   const oldFullPath = path.resolve(DATA_DIR, oldPath);
   const newFullPath = path.resolve(DATA_DIR, newPath);
 
-  if (!fs.existsSync(oldFullPath)) {
+  if (!(await fileExists(oldFullPath))) {
     return reply.status(404).send({ error: "File or folder not found" });
   }
 
   try {
-    fs.renameSync(oldFullPath, newFullPath);
+    await fsp.rename(oldFullPath, newFullPath);
     return { success: true };
   } catch (e) {
     console.error("Error renaming:", e);
@@ -304,9 +402,8 @@ app.post("/api/files/rename", async (request, reply) => {
   }
 });
 
-// Delete file or folder
-app.delete("/api/files/:path", async (request, reply) => {
-  const targetPath = request.params.path;
+app.delete("/api/files/*", async (request, reply) => {
+  const targetPath = request.params["*"];
 
   if (!isPathSafe(targetPath)) {
     return reply.status(403).send({ error: "Access denied" });
@@ -314,12 +411,12 @@ app.delete("/api/files/:path", async (request, reply) => {
 
   const fullPath = path.resolve(DATA_DIR, targetPath);
 
-  if (!fs.existsSync(fullPath)) {
+  if (!(await fileExists(fullPath))) {
     return reply.status(404).send({ error: "File or folder not found" });
   }
 
   try {
-    fs.rmSync(fullPath, { recursive: true });
+    await fsp.rm(fullPath, { recursive: true });
     return { success: true };
   } catch (e) {
     console.error("Error deleting:", e);
@@ -327,12 +424,11 @@ app.delete("/api/files/:path", async (request, reply) => {
   }
 });
 
-// WebSocket terminal handler
 app.get("/ws/terminal", { websocket: true }, (socket, req) => {
   const shell = process.env.SHELL || "/bin/bash";
   const cwd = fs.existsSync(DATA_DIR) ? DATA_DIR : process.cwd();
-  
-  let ptyProcess = null;
+
+  let proc = null;
   let isAlive = true;
 
   const send = (type, data = {}) => {
@@ -347,22 +443,19 @@ app.get("/ws/terminal", { websocket: true }, (socket, req) => {
 
   const cleanup = () => {
     isAlive = false;
-    if (ptyProcess) {
+    if (proc) {
       try {
-        ptyProcess.kill();
+        proc.kill();
+        proc.terminal?.close();
       } catch (e) {
         // Already dead
       }
-      ptyProcess = null;
+      proc = null;
     }
   };
 
-  // Spawn PTY with proper settings
   try {
-    ptyProcess = pty.spawn(shell, [], {
-      name: "xterm-256color",
-      cols: 80,
-      rows: 24,
+    proc = Bun.spawn([shell], {
       cwd: cwd,
       env: {
         ...process.env,
@@ -370,7 +463,13 @@ app.get("/ws/terminal", { websocket: true }, (socket, req) => {
         COLORTERM: "truecolor",
         LANG: process.env.LANG || "en_US.UTF-8",
       },
-      encoding: "utf8",
+      terminal: {
+        cols: 80,
+        rows: 24,
+        data(terminal, data) {
+          send("output", { data: typeof data === "string" ? data : new TextDecoder().decode(data) });
+        },
+      },
     });
   } catch (e) {
     send("error", { message: "Failed to spawn shell: " + e.message });
@@ -378,41 +477,34 @@ app.get("/ws/terminal", { websocket: true }, (socket, req) => {
     return;
   }
 
-  // Handle PTY output
-  ptyProcess.onData((data) => {
-    send("output", { data });
-  });
-
-  // Handle PTY exit
-  ptyProcess.onExit(({ exitCode, signal }) => {
-    send("exit", { code: exitCode, signal });
+  proc.exited.then((exitCode) => {
+    send("exit", { code: exitCode });
     socket.close();
   });
 
-  // Handle incoming messages
   socket.on("message", (raw) => {
-    if (!ptyProcess) return;
+    if (!proc || !proc.terminal) return;
 
     try {
       const msg = JSON.parse(raw.toString());
-      
+
       switch (msg.type) {
         case "input":
           if (typeof msg.data === "string") {
-            ptyProcess.write(msg.data);
+            proc.terminal.write(msg.data);
           }
           break;
-          
+
         case "resize":
           const cols = Math.max(1, Math.min(500, parseInt(msg.cols) || 80));
           const rows = Math.max(1, Math.min(200, parseInt(msg.rows) || 24));
           try {
-            ptyProcess.resize(cols, rows);
+            proc.terminal.resize(cols, rows);
           } catch (e) {
             // Ignore resize errors
           }
           break;
-          
+
         case "ping":
           send("pong");
           break;
@@ -426,22 +518,25 @@ app.get("/ws/terminal", { websocket: true }, (socket, req) => {
   socket.on("error", cleanup);
 });
 
-// Terminal HTML page
 app.get("/terminal", async (request, reply) => {
   const terminalHtml = path.join(__dirname, "terminal.html");
-  return reply.type("text/html").send(fs.readFileSync(terminalHtml, "utf-8"));
+  const content = await fsp.readFile(terminalHtml, "utf-8");
+  return reply.type("text/html").send(content);
 });
 
-// File Manager - served by React app (SPA fallback)
-app.get("/manager", async (request, reply) => {
-  const indexHtml = path.join(clientBuildPath, "index.html");
-  if (fs.existsSync(indexHtml)) {
-    return reply.type("text/html").send(fs.readFileSync(indexHtml, "utf-8"));
+app.setNotFoundHandler(async (request, reply) => {
+  if (request.url.startsWith("/api/") || request.url.startsWith("/ws/")) {
+    return reply.status(404).send({ error: "Not found" });
   }
-  return reply.redirect("/");
+  const indexHtml = path.join(clientBuildPath, "index.html");
+  try {
+    const content = await fsp.readFile(indexHtml, "utf-8");
+    return reply.type("text/html").send(content);
+  } catch {
+    return reply.status(404).send({ error: "Not found" });
+  }
 });
 
-// Start server
 const start = async () => {
   try {
     await app.listen({ port: 3000, host: "0.0.0.0" });

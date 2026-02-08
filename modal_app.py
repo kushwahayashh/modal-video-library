@@ -11,18 +11,17 @@ image = (
         "ffmpeg",
         "aria2",
         "curl",
+        "unzip",
         "mediainfo",
         "imagemagick",
         "libmagic1",
         "wget",
-        # node-pty build dependencies
-        "build-essential",
-        "python3",
     )
     .run_commands(
-        # Install Node.js (latest LTS)
-        "curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -",
-        "apt-get install -y nodejs",
+        # Install Bun
+        "curl -fsSL https://bun.sh/install | bash",
+        "ln -s /root/.bun/bin/bun /usr/local/bin/bun",
+        "ln -s /root/.bun/bin/bunx /usr/local/bin/bunx",
         # Install yt-dlp
         "curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp",
         "chmod a+rx /usr/local/bin/yt-dlp",
@@ -43,13 +42,11 @@ image = (
     .add_local_file("server/package.json", "/app/server/package.json", copy=True)
     .add_local_file("client/package.json", "/app/client/package.json", copy=True)
     .add_local_file("client/vite.config.js", "/app/client/vite.config.js", copy=True)
-    .add_local_file("client/tailwind.config.js", "/app/client/tailwind.config.js", copy=True)
-    .add_local_file("client/postcss.config.js", "/app/client/postcss.config.js", copy=True)
     .add_local_file("client/index.html", "/app/client/index.html", copy=True)
-    # Install dependencies during image build
+    # Install dependencies during image build (bun handles native modules)
     .run_commands(
-        "cd /app/server && npm install",
-        "cd /app/client && npm install",
+        "cd /app/server && bun install",
+        "cd /app/client && bun install",
     )
     # Add source code (changes here won't re-run npm install)
     .add_local_dir("server/src", remote_path="/app/server/src")
@@ -82,12 +79,12 @@ def run():
     
     # Build client (source code may have changed)
     print("Building client...")
-    subprocess.run(["npm", "run", "build"], cwd="/app/client", check=True)
+    subprocess.run(["bun", "run", "build"], cwd="/app/client", check=True)
     
-    # Start Node server in background
+    # Start server in background
     print("Starting server...")
-    node_proc = subprocess.Popen(
-        ["npm", "run", "start"],
+    server_proc = subprocess.Popen(
+        ["bun", "run", "start"],
         cwd="/app/server",
     )
     
@@ -137,7 +134,7 @@ def run():
     # Wait for tunnel process
     cf_proc.wait()
     
-    node_proc.terminate()
+    server_proc.terminate()
 
 
 @app.function()

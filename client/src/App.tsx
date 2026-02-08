@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { Search, Play, Download, Trash2, Edit3, Copy, Info } from "lucide-react";
+import { Search, Play, Download, Trash2, Edit3, Copy, Info, X } from "lucide-react";
+// @ts-expect-error plyr types export both default and namespace which confuses bundler resolution
 import Plyr from "plyr";
 import "plyr/dist/plyr.css";
 import "./App.css";
+import { formatBytes, formatDate } from "./utils";
 import type { Video } from "./types";
 
 interface ContextMenuState {
@@ -11,6 +13,12 @@ interface ContextMenuState {
   x: number;
   y: number;
   video: Video | null;
+}
+
+type ActionModalType = "rename" | "delete" | "properties" | null;
+
+interface VideoProperties extends Video {
+  modifiedAt?: string;
 }
 
 interface ContextMenuProps {
@@ -32,7 +40,7 @@ function ContextMenu({ state, onClose, onAction }: ContextMenuProps) {
     };
 
     const handleScroll = () => onClose();
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
 
@@ -88,10 +96,7 @@ function ContextMenu({ state, onClose, onAction }: ContextMenuProps) {
       className="context-menu"
       style={{ left: state.x, top: state.y }}
     >
-      {menuItems.map((item) =>
-        item.divider ? (
-          <div key={item.id} className="context-menu-divider" />
-        ) : (
+      {menuItems.map((item) => (
           <button
             key={item.id}
             className={`context-menu-item ${item.danger ? "danger" : ""}`}
@@ -103,8 +108,7 @@ function ContextMenu({ state, onClose, onAction }: ContextMenuProps) {
             {item.icon && <item.icon size={16} />}
             <span>{item.label}</span>
           </button>
-        )
-      )}
+      ))}
     </div>
   );
 }
@@ -176,8 +180,26 @@ function App() {
     y: 0,
     video: null,
   });
+  const [actionModal, setActionModal] = useState<ActionModalType>(null);
+  const [actionVideo, setActionVideo] = useState<Video | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [videoProps, setVideoProps] = useState<VideoProperties | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<Plyr | null>(null);
+
+  const fetchVideos = useCallback(() => {
+    fetch("/api/videos")
+      .then((r) => r.json())
+      .then((data) => {
+        setVideos(data.videos || []);
+        setLoading(false);
+      })
+      .catch(() => {
+        setVideos([]);
+        setLoading(false);
+      });
+  }, []);
 
   const openContextMenu = (e: React.MouseEvent, video: Video) => {
     setContextMenu({
@@ -192,7 +214,72 @@ function App() {
     setContextMenu((prev) => ({ ...prev, visible: false }));
   }, []);
 
-  const handleContextAction = useCallback((action: string, video: Video) => {
+  const openActionModal = (type: ActionModalType, video: Video) => {
+    setActionVideo(video);
+    setActionModal(type);
+    if (type === "rename") {
+      setRenameValue(video.title);
+    } else if (type === "properties") {
+      fetch(`/api/videos/${video.id}`)
+        .then((r) => r.json())
+        .then((data) => setVideoProps(data))
+        .catch(() => setVideoProps(video));
+    }
+  };
+
+  const closeActionModal = () => {
+    setActionModal(null);
+    setActionVideo(null);
+    setRenameValue("");
+    setVideoProps(null);
+    setActionLoading(false);
+  };
+
+  const confirmRename = async () => {
+    if (!renameValue.trim() || !actionVideo) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/videos/${actionVideo.id}/rename`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newName: renameValue.trim() }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to rename");
+      }
+      closeActionModal();
+      fetchVideos();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to rename");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!actionVideo) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch(`/api/videos/${actionVideo.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Failed to delete");
+      closeActionModal();
+      fetchVideos();
+    } catch {
+      alert("Failed to delete video");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") confirmRename();
+    if (e.key === "Escape") closeActionModal();
+  };
+
+  const handleContextAction = (action: string, video: Video) => {
     switch (action) {
       case "play":
         openModal(video);
@@ -204,12 +291,16 @@ function App() {
         navigator.clipboard.writeText(`${window.location.origin}/api/stream/${video.id}`);
         break;
       case "rename":
+        openActionModal("rename", video);
+        break;
       case "info":
+        openActionModal("properties", video);
+        break;
       case "delete":
-        console.log(`Action: ${action}`, video);
+        openActionModal("delete", video);
         break;
     }
-  }, []);
+  };
 
   const openModal = (video: Video) => {
     setSelectedVideo(video);
@@ -229,7 +320,7 @@ function App() {
 
   // ESC key to close modal
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape" && selectedVideo) {
         closeModal();
       }
@@ -248,17 +339,8 @@ function App() {
   }, [selectedVideo]);
 
   useEffect(() => {
-    fetch("/api/videos")
-      .then((r) => r.json())
-      .then((data) => {
-        setVideos(data.videos || []);
-        setLoading(false);
-      })
-      .catch(() => {
-        setVideos([]);
-        setLoading(false);
-      });
-  }, []);
+    fetchVideos();
+  }, [fetchVideos]);
 
   return (
     <div className="app">
@@ -282,7 +364,6 @@ function App() {
           <div className="nav-right">
             <Link to="/manager" className="nav-btn">Manager</Link>
             <a href="/terminal" target="_blank" rel="noopener noreferrer" className="nav-btn">Terminal</a>
-            <button className="nav-btn">Upload</button>
           </div>
         </div>
       </nav>
@@ -324,6 +405,94 @@ function App() {
                 <source src={`/api/stream/${selectedVideo.id}`} type="video/mp4" />
               </video>
             </div>
+          </div>
+        </div>
+      )}
+
+      {actionModal && actionVideo && (
+        <div className="action-modal-overlay" onClick={closeActionModal}>
+          <div className="action-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="action-modal-close" onClick={closeActionModal}>
+              <X size={20} />
+            </button>
+
+            {actionModal === "rename" && (
+              <>
+                <div className="action-modal-title">Rename Video</div>
+                <input
+                  className="action-modal-input"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onKeyDown={handleRenameKeyDown}
+                  autoFocus
+                  placeholder="Enter new name"
+                />
+                <div className="action-modal-actions">
+                  <button className="action-btn secondary" onClick={closeActionModal}>Cancel</button>
+                  <button className="action-btn primary" onClick={confirmRename} disabled={actionLoading}>
+                    {actionLoading ? "Renaming..." : "Rename"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {actionModal === "delete" && (
+              <>
+                <div className="action-modal-title">Delete Video</div>
+                <div className="action-modal-message">
+                  Are you sure you want to delete <strong>"{actionVideo.title}"</strong>?
+                  <br />
+                  <span className="text-muted">This action cannot be undone.</span>
+                </div>
+                <div className="action-modal-actions">
+                  <button className="action-btn secondary" onClick={closeActionModal}>Cancel</button>
+                  <button className="action-btn danger" onClick={confirmDelete} disabled={actionLoading}>
+                    {actionLoading ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {actionModal === "properties" && (
+              <>
+                <div className="action-modal-title">Video Properties</div>
+                <div className="action-modal-properties">
+                  <div className="prop-row">
+                    <span className="prop-label">Title</span>
+                    <span className="prop-value">{videoProps?.title || actionVideo.title}</span>
+                  </div>
+                  <div className="prop-row">
+                    <span className="prop-label">Filename</span>
+                    <span className="prop-value">{videoProps?.filename || actionVideo.filename}</span>
+                  </div>
+                  <div className="prop-row">
+                    <span className="prop-label">Size</span>
+                    <span className="prop-value">
+                      {videoProps?.sizeBytes ? formatBytes(videoProps.sizeBytes) : actionVideo.size}
+                    </span>
+                  </div>
+                  <div className="prop-row">
+                    <span className="prop-label">Duration</span>
+                    <span className="prop-value">{videoProps?.duration || actionVideo.duration || "Unknown"}</span>
+                  </div>
+                  <div className="prop-row">
+                    <span className="prop-label">Created</span>
+                    <span className="prop-value">
+                      {formatDate(videoProps?.createdAt || actionVideo.createdAt)}
+                    </span>
+                  </div>
+                  {videoProps?.modifiedAt && (
+                    <div className="prop-row">
+                      <span className="prop-label">Modified</span>
+                      <span className="prop-value">{formatDate(videoProps.modifiedAt)}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="action-modal-actions">
+                  <button className="action-btn primary" onClick={closeActionModal}>Close</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
