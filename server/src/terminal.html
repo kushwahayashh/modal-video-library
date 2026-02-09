@@ -9,7 +9,7 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
   <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
@@ -19,16 +19,28 @@
 
   <style>
     :root {
-      --bg-primary: #0a0a0a;
-      --bg-secondary: #141414;
-      --bg-tertiary: #1e1e1e;
-      --bg-hover: #282828;
-      --border: rgba(255, 255, 255, 0.1);
-      --text-primary: #e4e4e4;
+      --bg-primary: #121212;
+      --bg-secondary: #171717;
+      --bg-tertiary: #1f1f1f;
+      --bg-card: #1a1a1a;
+      --bg-card-hover: #222222;
+      --text-primary: #ffffff;
+      --text-secondary: #a8a8a8;
       --text-muted: #707070;
+      --border: #2a2a2a;
+      --accent: #ffffff;
+      --danger: #dc2626;
+      --danger-hover: #b91c1c;
       --success: #4ade80;
       --warning: #fbbf24;
-      --error: #f87171;
+      --overlay-nav: rgba(18, 18, 18, 0.92);
+      --overlay-strong: rgba(16, 16, 16, 0.9);
+      --overlay-medium: rgba(16, 16, 16, 0.82);
+      --overlay-light: rgba(16, 16, 16, 0.72);
+      --danger-subtle: rgba(220, 38, 38, 0.12);
+      --shimmer-highlight: rgba(255, 255, 255, 0.04);
+      --shadow-strong: 0 8px 24px rgba(0, 0, 0, 0.4);
+      --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.5);
     }
 
     * {
@@ -41,7 +53,7 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      font-family: 'Space Mono', monospace;
+      font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
       background: var(--bg-primary);
       color: var(--text-primary);
       -webkit-font-smoothing: antialiased;
@@ -84,13 +96,19 @@
       font-size: 0.7rem;
       font-family: inherit;
       font-weight: 500;
+      border-radius: 4px;
       cursor: pointer;
       transition: background 0.15s;
       display: none;
     }
 
     .btn:hover {
-      background: var(--bg-hover);
+      background: var(--bg-card);
+    }
+
+    .btn:focus-visible {
+      outline: 2px solid var(--text-primary);
+      outline-offset: 2px;
     }
 
     .btn.visible {
@@ -103,11 +121,19 @@
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.04em;
+      color: var(--text-secondary);
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 4px;
     }
 
-    .status.connecting { color: var(--warning); }
-    .status.connected { color: var(--success); }
-    .status.disconnected { color: var(--error); }
+    .status[data-state="connected"] {
+      color: var(--text-primary);
+    }
+
+    .status[data-state="disconnected"] {
+      color: var(--text-muted);
+    }
 
     .terminal-container {
       flex: 1;
@@ -134,7 +160,7 @@
     }
 
     .xterm-viewport::-webkit-scrollbar-thumb {
-      background: var(--bg-tertiary);
+      background: var(--border);
     }
   </style>
 </head>
@@ -146,7 +172,7 @@
       <div class="header-right">
         <button class="btn visible" onclick="clearAndRedraw()">Clear</button>
         <button id="reconnect-btn" class="btn" onclick="reconnect()">Reconnect</button>
-        <div id="status" class="status connecting">Connecting</div>
+        <div id="status" class="status" data-state="connecting">Connecting</div>
       </div>
     </header>
     <div class="terminal-container">
@@ -155,228 +181,407 @@
   </div>
 
   <script>
-    const RECONNECT_DELAY = 2000;
+    const RECONNECT_BASE_DELAY = 2000;
+    const RECONNECT_MAX_DELAY = 15000;
     const PING_INTERVAL = 25000;
-    const RESIZE_DEBOUNCE = 100;
+    const RESIZE_DEBOUNCE = 80;
 
-    let term = null;
-    let fitAddon = null;
-    let ws = null;
-    let pingTimer = null;
-    let resizeTimer = null;
-    let isConnected = false;
+    const decoder = new TextDecoder();
 
-    function setStatus(state) {
+    const state = {
+      term: null,
+      fitAddon: null,
+      ws: null,
+      pingTimer: null,
+      resizeTimer: null,
+      reconnectTimer: null,
+      renderTimer: null,
+      reconnectAttempts: 0,
+      isConnected: false,
+      isConnecting: false,
+      isClosing: false,
+      didExit: false,
+      lastCols: 0,
+      lastRows: 0,
+    };
+
+    function cssVar(name) {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    }
+
+    function parseColor(value) {
+      const v = value.trim();
+      if (!v) return null;
+      if (v.startsWith('#')) {
+        const hex = v.slice(1);
+        const full = hex.length === 3
+          ? hex.split('').map((c) => c + c).join('')
+          : hex;
+        const num = parseInt(full, 16);
+        return {
+          r: (num >> 16) & 255,
+          g: (num >> 8) & 255,
+          b: num & 255,
+        };
+      }
+      const rgbMatch = v.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+      if (rgbMatch) {
+        return {
+          r: parseInt(rgbMatch[1], 10),
+          g: parseInt(rgbMatch[2], 10),
+          b: parseInt(rgbMatch[3], 10),
+        };
+      }
+      return null;
+    }
+
+    function withAlpha(color, alpha) {
+      if (!color) return '';
+      return `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`;
+    }
+
+    function buildTheme() {
+      const bg = cssVar('--bg-primary');
+      const foreground = cssVar('--text-primary');
+      const fgColor = parseColor(foreground);
+      const selectionBg = withAlpha(fgColor, 0.18) || cssVar('--text-secondary');
+
+      return {
+        background: bg,
+        foreground: foreground,
+        cursor: foreground,
+        cursorAccent: bg,
+        selectionBackground: selectionBg,
+        selectionForeground: foreground,
+      };
+    }
+
+    function setStatus(stateName) {
       const el = document.getElementById('status');
       const btn = document.getElementById('reconnect-btn');
-      
-      el.className = 'status ' + state;
-      el.textContent = state === 'connecting' ? 'Connecting' : 
-                       state === 'connected' ? 'Connected' : 'Disconnected';
-      
-      btn.classList.toggle('visible', state === 'disconnected');
+
+      el.dataset.state = stateName;
+      el.textContent = stateName === 'connecting'
+        ? 'Connecting'
+        : stateName === 'connected'
+          ? 'Connected'
+          : 'Disconnected';
+
+      btn.classList.toggle('visible', stateName === 'disconnected');
     }
 
     function sendMessage(type, data = {}) {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type, ...data }));
+      if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(JSON.stringify({ type, ...data }));
       }
     }
 
+    function sendResize(force = false) {
+      if (!state.term || !state.isConnected) return;
+      const cols = state.term.cols;
+      const rows = state.term.rows;
+      if (!force && cols === state.lastCols && rows === state.lastRows) return;
+      state.lastCols = cols;
+      state.lastRows = rows;
+      sendMessage('resize', { cols, rows });
+    }
+
     function doFit() {
-      if (!fitAddon || !term) return;
-      
+      if (!state.fitAddon || !state.term) return;
+      const container = document.getElementById('terminal');
+      if (!container) return;
+      if (container.clientWidth === 0 || container.clientHeight === 0) return;
+
       try {
-        fitAddon.fit();
-        
-        if (isConnected) {
-          sendMessage('resize', { cols: term.cols, rows: term.rows });
-        }
+        state.fitAddon.fit();
+        forceRender();
       } catch (e) {
         console.warn('Fit error:', e);
       }
     }
 
     function scheduleFit() {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(doFit, RESIZE_DEBOUNCE);
+      clearTimeout(state.resizeTimer);
+      state.resizeTimer = setTimeout(() => {
+        requestAnimationFrame(doFit);
+      }, RESIZE_DEBOUNCE);
+    }
+
+    function writeSystemLine(message) {
+      if (!state.term) return;
+      state.term.writeln(`\r\n\x1b[2m${message}\x1b[0m`);
+    }
+
+    function forceRender() {
+      if (!state.term) return;
+      if (typeof state.term.refresh === 'function') {
+        try {
+          const end = Math.max(0, state.term.rows - 1);
+          state.term.refresh(0, end);
+        } catch (e) {
+          // Ignore refresh errors
+        }
+        return;
+      }
+      try {
+        state.term.write('');
+      } catch (e) {
+        // Ignore write errors
+      }
+    }
+
+    function refocusTerminal() {
+      if (!state.term) return;
+      state.term.focus();
+      forceRender();
+    }
+
+    function clearTimers() {
+      clearInterval(state.pingTimer);
+      clearTimeout(state.reconnectTimer);
+      clearTimeout(state.resizeTimer);
+      clearInterval(state.renderTimer);
+      state.pingTimer = null;
+      state.reconnectTimer = null;
+      state.resizeTimer = null;
+      state.renderTimer = null;
+    }
+
+    function startRenderHeartbeat() {
+      if (state.renderTimer || !state.term) return;
+      state.renderTimer = setInterval(() => {
+        if (document.hidden) return;
+        forceRender();
+      }, 2000);
+    }
+
+    function stopRenderHeartbeat() {
+      clearInterval(state.renderTimer);
+      state.renderTimer = null;
+    }
+
+    function cleanupSocket() {
+      if (!state.ws) return;
+      state.ws.onopen = null;
+      state.ws.onclose = null;
+      state.ws.onerror = null;
+      state.ws.onmessage = null;
+      state.ws.close();
+      state.ws = null;
+    }
+
+    function scheduleReconnect() {
+      if (state.isClosing || state.reconnectTimer) return;
+      state.reconnectAttempts += 1;
+      const delay = Math.min(
+        RECONNECT_BASE_DELAY * Math.pow(1.4, state.reconnectAttempts - 1),
+        RECONNECT_MAX_DELAY
+      );
+      state.reconnectTimer = setTimeout(() => {
+        state.reconnectTimer = null;
+        connect();
+      }, delay);
     }
 
     function connect() {
-      if (ws) {
-        ws.onclose = null;
-        ws.onerror = null;
-        ws.onmessage = null;
-        ws.close();
-        ws = null;
-      }
+      if (state.isConnecting) return;
 
-      clearInterval(pingTimer);
-      isConnected = false;
+      state.isConnecting = true;
+      state.didExit = false;
       setStatus('connecting');
 
+      clearTimeout(state.reconnectTimer);
+      state.reconnectTimer = null;
+      cleanupSocket();
+      clearInterval(state.pingTimer);
+
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      ws = new WebSocket(`${protocol}//${location.host}/ws/terminal`);
+      const ws = new WebSocket(`${protocol}//${location.host}/ws/terminal`);
       ws.binaryType = 'arraybuffer';
+      state.ws = ws;
 
       ws.onopen = () => {
-        isConnected = true;
+        state.isConnecting = false;
+        state.isConnected = true;
+        state.reconnectAttempts = 0;
         setStatus('connected');
-        
-        // Send initial size immediately and after a short delay to ensure sync
+
         doFit();
         setTimeout(doFit, 50);
-        setTimeout(doFit, 200);
-        
-        // Start ping interval
-        pingTimer = setInterval(() => sendMessage('ping'), PING_INTERVAL);
+        setTimeout(() => sendResize(true), 120);
+        setTimeout(refocusTerminal, 150);
+        startRenderHeartbeat();
+
+        state.pingTimer = setInterval(() => sendMessage('ping'), PING_INTERVAL);
       };
 
       ws.onmessage = (e) => {
         let msg;
-        
+        const text = typeof e.data === 'string' ? e.data : decoder.decode(e.data);
+
         try {
-          const text = typeof e.data === 'string' ? e.data : new TextDecoder().decode(e.data);
           msg = JSON.parse(text);
         } catch {
-          // Raw data fallback
-          term.write(typeof e.data === 'string' ? e.data : new TextDecoder().decode(e.data));
+          if (state.term) {
+            state.term.write(text);
+          }
           return;
         }
 
         switch (msg.type) {
           case 'output':
-            term.write(msg.data);
+            if (state.term) state.term.write(msg.data);
             break;
           case 'exit':
-            term.writeln('\r\n\x1b[90m[Process exited]\x1b[0m');
+            state.didExit = true;
+            writeSystemLine('[Process exited]');
+            break;
+          case 'error':
+            writeSystemLine(msg.message || 'Terminal error');
+            break;
+          case 'pong':
             break;
         }
       };
 
       ws.onclose = (e) => {
-        isConnected = false;
-        clearInterval(pingTimer);
+        state.isConnecting = false;
+        state.isConnected = false;
+        clearInterval(state.pingTimer);
+        stopRenderHeartbeat();
+        if (state.ws === ws) state.ws = null;
         setStatus('disconnected');
-        
-        if (!e.wasClean) {
-          term.writeln('\r\n\x1b[33mConnection lost\x1b[0m');
+
+        if (!state.didExit && !e.wasClean) {
+          writeSystemLine('[Connection lost]');
         }
+
+        scheduleReconnect();
       };
 
-      ws.onerror = (e) => {
-        console.error('WebSocket error:', e);
+      ws.onerror = () => {
+        if (state.isConnected) {
+          state.isConnected = false;
+          setStatus('disconnected');
+        }
+        try {
+          ws.close();
+        } catch (e) {
+          // Ignore close errors
+        }
       };
     }
 
     function reconnect() {
-      term.clear();
+      if (!state.term) return;
+      state.term.clear();
+      state.term.focus();
       connect();
     }
 
     function clearAndRedraw() {
-      term.clear();
-      // Send Ctrl+L to shell to redraw prompt
+      if (!state.term) return;
+      state.term.clear();
       sendMessage('input', { data: '\x0c' });
-      term.focus();
+      state.term.focus();
     }
 
     function init() {
-      // Create terminal with proper settings
-      term = new Terminal({
-        cursorBlink: true,
+      state.term = new Terminal({
+        cursorBlink: false,
         cursorStyle: 'bar',
-        cursorInactiveStyle: 'outline',
+        cursorInactiveStyle: 'bar',
+        cursorWidth: 2,
         fontSize: 14,
-        fontFamily: '"Space Mono", "Menlo", "Monaco", "Courier New", monospace',
+        fontFamily:
+          'ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
         fontWeight: '400',
         fontWeightBold: '700',
-        lineHeight: 1.1,
+        lineHeight: 1.15,
         letterSpacing: 0,
         scrollback: 10000,
         scrollOnUserInput: true,
         smoothScrollDuration: 0,
-        theme: {
-          background: '#0a0a0a',
-          foreground: '#e4e4e4',
-          cursor: '#e4e4e4',
-          cursorAccent: '#0a0a0a',
-          selectionBackground: 'rgba(255, 255, 255, 0.2)',
-          selectionForeground: '#ffffff',
-          black: '#0a0a0a',
-          red: '#f87171',
-          green: '#4ade80',
-          yellow: '#fbbf24',
-          blue: '#60a5fa',
-          magenta: '#c084fc',
-          cyan: '#22d3ee',
-          white: '#e4e4e4',
-          brightBlack: '#525252',
-          brightRed: '#fca5a5',
-          brightGreen: '#86efac',
-          brightYellow: '#fde047',
-          brightBlue: '#93c5fd',
-          brightMagenta: '#d8b4fe',
-          brightCyan: '#67e8f9',
-          brightWhite: '#ffffff',
-        },
+        theme: buildTheme(),
         allowProposedApi: true,
         windowsMode: false,
         convertEol: false,
       });
 
-      // Load addons
-      fitAddon = new FitAddon.FitAddon();
-      term.loadAddon(fitAddon);
-      term.loadAddon(new WebLinksAddon.WebLinksAddon());
-      
-      // Try WebGL renderer for better performance
-      try {
-        term.loadAddon(new WebglAddon.WebglAddon());
-      } catch (e) {
-        console.warn('WebGL addon failed, using canvas renderer');
+      state.fitAddon = new FitAddon.FitAddon();
+      state.term.loadAddon(state.fitAddon);
+      state.term.loadAddon(new WebLinksAddon.WebLinksAddon());
+
+      const params = new URLSearchParams(location.search);
+      if (params.get('renderer') === 'webgl') {
+        try {
+          state.term.loadAddon(new WebglAddon.WebglAddon());
+        } catch (e) {
+          console.warn('WebGL addon failed, using canvas renderer');
+        }
       }
 
-      // Open terminal
       const container = document.getElementById('terminal');
-      term.open(container);
+      state.term.open(container);
 
-      // Initial fit after render
       requestAnimationFrame(() => {
         doFit();
+        sendResize(true);
       });
 
-      // Handle input
-      term.onData((data) => {
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => scheduleFit()).catch(() => {});
+      }
+
+      state.term.onData((data) => {
         sendMessage('input', { data });
       });
 
-      // Handle resize from terminal
-      term.onResize(({ cols, rows }) => {
-        if (isConnected) {
-          sendMessage('resize', { cols, rows });
-        }
+      state.term.onResize(() => {
+        sendResize();
+        forceRender();
       });
 
-      // Observe container resize
       const resizeObserver = new ResizeObserver(scheduleFit);
       resizeObserver.observe(container);
-      
-      // Window resize fallback
-      window.addEventListener('resize', scheduleFit);
 
-      // Focus terminal
-      term.focus();
+      container.addEventListener('mousedown', () => {
+        refocusTerminal();
+      });
+      container.addEventListener('touchstart', () => {
+        refocusTerminal();
+      }, { passive: true });
 
-      // Handle visibility change to refocus
+      window.addEventListener('resize', scheduleFit, { passive: true });
+
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
-          term.focus();
+          refocusTerminal();
           scheduleFit();
+          startRenderHeartbeat();
+        } else {
+          stopRenderHeartbeat();
         }
       });
 
-      // Connect
+      window.addEventListener('focus', () => {
+        refocusTerminal();
+        scheduleFit();
+        startRenderHeartbeat();
+      });
+
+      window.addEventListener('blur', () => {
+        stopRenderHeartbeat();
+      });
+
+      window.addEventListener('beforeunload', () => {
+        state.isClosing = true;
+        clearTimers();
+        cleanupSocket();
+      });
+
+      refocusTerminal();
+      startRenderHeartbeat();
       connect();
     }
 

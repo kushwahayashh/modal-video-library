@@ -16,7 +16,7 @@
   left: 0;
   right: 0;
   z-index: 100;
-  background: rgba(10, 10, 10, 0.95);
+  background: var(--overlay-nav);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border);
 }
@@ -147,7 +147,7 @@
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.04) 50%,
+    var(--shimmer-highlight) 50%,
     transparent 100%
   );
   animation: shimmer 1.5s infinite;
@@ -232,7 +232,7 @@
   bottom: 8px;
   right: 8px;
   padding: 4px 8px;
-  background: rgba(0, 0, 0, 0.9);
+  background: var(--overlay-strong);
   font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.02em;
@@ -268,7 +268,7 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   padding: 6px 0;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-strong);
   animation: contextMenuFadeIn 0.15s ease;
 }
 
@@ -303,11 +303,11 @@
 }
 
 .context-menu-item.danger {
-  color: var(--danger, #ef4444);
+  color: var(--danger);
 }
 
 .context-menu-item.danger:hover {
-  background: rgba(239, 68, 68, 0.1);
+  background: var(--danger-subtle);
 }
 
 .context-menu-item svg {
@@ -319,7 +319,7 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.92);
+  background: var(--overlay-strong);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -381,7 +381,7 @@
   border-radius: 2px;
   padding: 0;
   background: transparent;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-medium);
 }
 
 .plyr__preview-thumb:before {
@@ -405,7 +405,7 @@
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
-  background: #000;
+  background: var(--bg-primary);
   flex-shrink: 0;
 }
 
@@ -531,7 +531,7 @@
 .action-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.85);
+  background: var(--overlay-medium);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -714,7 +714,7 @@
   color: var(--text-primary);
   z-index: 3000;
   min-width: 260px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-strong);
   animation: slideInRight 0.3s ease;
 }
 

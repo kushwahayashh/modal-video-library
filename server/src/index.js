@@ -660,6 +660,7 @@ app.delete("/api/files/*", async (request, reply) => {
 app.get("/ws/terminal", { websocket: true }, (socket, req) => {
   const shell = process.env.SHELL || "/bin/bash";
   const cwd = fs.existsSync(DATA_DIR) ? DATA_DIR : process.cwd();
+  const decoder = new TextDecoder();
 
   let proc = null;
   let isAlive = true;
@@ -719,7 +720,8 @@ app.get("/ws/terminal", { websocket: true }, (socket, req) => {
     if (!proc || !proc.terminal) return;
 
     try {
-      const msg = JSON.parse(raw.toString());
+      const text = typeof raw === "string" ? raw : decoder.decode(raw);
+      const msg = JSON.parse(text);
 
       switch (msg.type) {
         case "input":
@@ -729,8 +731,8 @@ app.get("/ws/terminal", { websocket: true }, (socket, req) => {
           break;
 
         case "resize":
-          const cols = Math.max(1, Math.min(500, parseInt(msg.cols) || 80));
-          const rows = Math.max(1, Math.min(200, parseInt(msg.rows) || 24));
+          const cols = Math.max(1, Math.min(500, parseInt(msg.cols, 10) || 80));
+          const rows = Math.max(1, Math.min(200, parseInt(msg.rows, 10) || 24));
           try {
             proc.terminal.resize(cols, rows);
           } catch (e) {

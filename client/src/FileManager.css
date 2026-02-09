@@ -111,11 +111,11 @@
 
 .fm-icon {
   flex-shrink: 0;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .fm-icon.folder {
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .fm-name-text {
@@ -148,7 +148,7 @@
   font-size: 0.875rem;
   opacity: 0.8;
   transition: opacity 0.15s;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .fm-action-btn:hover {
@@ -180,7 +180,7 @@
 .fm-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.8);
+  background: var(--overlay-light);
   display: flex;
   align-items: center;
   justify-content: center;
