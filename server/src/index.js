@@ -41,6 +41,8 @@ const DATA_DIR = process.env.DATA_DIR || "/data";
 const VIDEOS_DIR = path.join(DATA_DIR, "videos");
 const THUMBNAILS_DIR = path.join(DATA_DIR, "thumbnails");
 const SPRITES_DIR = path.join(DATA_DIR, "sprites");
+const PLACEHOLDERS_DIR = path.join(__dirname, "../../images");
+const PLACEHOLDER_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
 
 [VIDEOS_DIR, THUMBNAILS_DIR, SPRITES_DIR].forEach((dir) => {
   if (!fs.existsSync(dir)) {
@@ -51,6 +53,16 @@ const SPRITES_DIR = path.join(DATA_DIR, "sprites");
     }
   }
 });
+
+try {
+  await app.register(fastifyStatic, {
+    root: PLACEHOLDERS_DIR,
+    prefix: "/api/placeholder-images/",
+    decorateReply: false,
+  });
+} catch (e) {
+  // Images folder might be missing; ignore
+}
 
 let cloudflareUrl = null;
 
@@ -120,6 +132,18 @@ function formatBytes(bytes) {
 
 app.get("/api/health", async () => {
   return { status: "ok", timestamp: new Date().toISOString(), cloudflareUrl };
+});
+
+app.get("/api/placeholder-images", async () => {
+  try {
+    const entries = await fsp.readdir(PLACEHOLDERS_DIR, { withFileTypes: true });
+    const images = entries
+      .filter((entry) => entry.isFile() && PLACEHOLDER_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
+      .map((entry) => `/api/placeholder-images/${encodeURIComponent(entry.name)}`);
+    return { images };
+  } catch (e) {
+    return { images: [] };
+  }
 });
 
 app.post("/api/cf-url", async (request, reply) => {
@@ -351,7 +375,7 @@ async function runSpriteGeneration(id, filename, filePath) {
         "-ss", String(s.segStart),
         "-i", filePath,
         "-t", String(s.segEnd - s.segStart),
-        "-vf", `fps=1/${interval},scale=320:180`,
+        "-vf", `fps=1/${interval},scale=480:270`,
         "-q:v", "2",
         path.join(s.segDir, "frame_%04d.jpg"),
       ])
@@ -426,12 +450,12 @@ async function runSpriteGeneration(id, filename, filePath) {
       const startTime = (i - 1) * interval;
       if (startTime >= durationSecs) break;
       const endTime = Math.min(i * interval, durationSecs);
-      const x = ((i - 1) % cols) * 320;
-      const y = Math.floor((i - 1) / cols) * 180;
+      const x = ((i - 1) % cols) * 480;
+      const y = Math.floor((i - 1) / cols) * 270;
 
       vtt += `${i}\n`;
       vtt += `${formatTime(startTime)} --> ${formatTime(endTime)}\n`;
-      vtt += `/api/sprites/${id}/image#xywh=${x},${y},320,180\n\n`;
+      vtt += `/api/sprites/${id}/image#xywh=${x},${y},480,270\n\n`;
     }
 
     await fsp.writeFile(path.join(spriteDir, "sprite.vtt"), vtt);
@@ -442,6 +466,12 @@ async function runSpriteGeneration(id, filename, filePath) {
     console.log(`  sprites: "${title}" — done in ${elapsed}s`);
   } catch (e) {
     console.error(`  sprites: "${title}" — failed: ${e.message}`);
+    if (e?.stderr) {
+      console.error(`  sprites: "${title}" — stderr:\n${e.stderr.toString()}`);
+    }
+    if (e?.stdout) {
+      console.error(`  sprites: "${title}" — stdout:\n${e.stdout.toString()}`);
+    }
     job.status = "error";
     job.error = "Failed to generate sprites";
   } finally {
@@ -500,9 +530,10 @@ app.get("/api/sprites/:id/vtt", async (request, reply) => {
 
 app.get("/api/sprites/:id/status", async (request, reply) => {
   const { id } = request.params;
+  const spriteDir = path.join(SPRITES_DIR, id);
   const spriteExists =
-    (await fileExists(path.join(SPRITES_DIR, id, "sprite.jpg"))) &&
-    (await fileExists(path.join(SPRITES_DIR, id, "sprite.vtt")));
+    (await fileExists(path.join(spriteDir, "sprite.jpg"))) &&
+    (await fileExists(path.join(spriteDir, "sprite.vtt")));
 
   return { exists: spriteExists };
 });

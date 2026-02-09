@@ -21,7 +21,7 @@ image = (
         # Install Node.js + npm
         "curl -fsSL https://deb.nodesource.com/setup_22.x | bash -",
         "apt-get install -y nodejs",
-        "npm i -g @openai/codex",
+        "npm i -g @openai/codex @qwen-code/qwen-code",
         # Install Bun
         "curl -fsSL https://bun.sh/install | bash",
         "ln -s /root/.bun/bin/bun /usr/local/bin/bun",
@@ -55,6 +55,7 @@ image = (
     # Add source code (changes here won't re-run npm install)
     .add_local_dir("server/src", remote_path="/app/server/src")
     .add_local_dir("client/src", remote_path="/app/client/src")
+    .add_local_dir("images", remote_path="/app/images")
 )
 
 app = modal.App("video-library", image=image)
@@ -66,6 +67,7 @@ cf_url_store = modal.Dict.from_name("cf-url-store", create_if_missing=True)
 @app.function(
     timeout=86400,
     volumes={"/data": volume},
+    env={"HOME": "/data/.home"},
 )
 def run():
     import re
@@ -77,22 +79,95 @@ def run():
     os.chdir("/app")
     
     # Ensure data directories exist
+    os.makedirs("/data/.home", exist_ok=True)
     os.makedirs("/data/videos", exist_ok=True)
     os.makedirs("/data/thumbnails", exist_ok=True)
     os.makedirs("/data/db", exist_ok=True)
     
     print("\n  \033[1mVIDEOLIB\033[0m starting...\n")
 
-    # Build client
-    print("  Building client...", end=" ", flush=True)
-    subprocess.run(
-        ["bun", "run", "build"],
-        cwd="/app/client",
-        check=True,
+    # Start tunnel
+    print("  Starting tunnel...", end=" ", flush=True)
+    tunnel_ready = threading.Event()
+    server_ready = threading.Event()
+    cf_url_holder = {"url": None}
+
+    cf_proc = subprocess.Popen(
+        ["cloudflared", "tunnel", "--url", "http://localhost:3000"],
+        stderr=subprocess.PIPE,
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
     )
-    print("\033[32mdone\033[0m")
+
+    def push_cf_url(url):
+        for _ in range(20):
+            if server_ready.is_set():
+                try:
+                    data = json.dumps({"url": url}).encode("utf-8")
+                    req = urllib.request.Request(
+                        "http://localhost:3000/api/cf-url",
+                        data=data,
+                        headers={"Content-Type": "application/json"},
+                    )
+                    urllib.request.urlopen(req, timeout=5)
+                    return
+                except Exception:
+                    time.sleep(0.5)
+            else:
+                time.sleep(0.2)
+
+    def capture_cf_url(proc):
+        url_found = False
+        for line in iter(proc.stderr.readline, b""):
+            line_str = line.decode("utf-8", errors="ignore")
+            match = re.search(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com", line_str)
+            if match and not url_found:
+                url_found = True
+                cf_url = match.group(0)
+                print(f"\033[32mdone\033[0m")
+                print(f"\n  \033[1mPublic URL:\033[0m \033[36m{cf_url}\033[0m\n")
+                cf_url_store["url"] = cf_url
+                cf_url_holder["url"] = cf_url
+                tunnel_ready.set()
+                push_cf_url(cf_url)
+
+    capture_thread = threading.Thread(target=capture_cf_url, args=(cf_proc,), daemon=True)
+    capture_thread.start()
+
+    # Build client in parallel with tunnel startup
+    build_done = threading.Event()
+    build_error = {"err": None}
+
+    def build_client():
+        try:
+            subprocess.run(
+                ["bun", "run", "build"],
+                cwd="/app/client",
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception as e:
+            build_error["err"] = e
+        finally:
+            build_done.set()
+
+    build_thread = threading.Thread(target=build_client, daemon=True)
+    build_thread.start()
+
+    # Wait for tunnel URL first (up to 15s)
+    tunnel_ready.wait(timeout=15)
+
+    # Then wait for build to finish
+    if not build_done.is_set():
+        print("  Building client...", end=" ", flush=True)
+        build_done.wait()
+        if build_error["err"]:
+            print("\033[31mfailed\033[0m")
+            raise build_error["err"]
+        print("\033[32mdone\033[0m")
+    else:
+        if build_error["err"]:
+            raise build_error["err"]
 
     # Start server
     print("  Starting server...", end=" ", flush=True)
@@ -108,6 +183,10 @@ def run():
         if line_str:
             break
     print("\033[32mdone\033[0m")
+    server_ready.set()
+
+    if tunnel_ready.is_set() and cf_url_holder["url"]:
+        push_cf_url(cf_url_holder["url"])
 
     def pipe_server_output(proc):
         for line in iter(proc.stdout.readline, b""):
@@ -117,39 +196,6 @@ def run():
 
     server_thread = threading.Thread(target=pipe_server_output, args=(server_proc,), daemon=True)
     server_thread.start()
-
-    # Start tunnel
-    print("  Starting tunnel...", end=" ", flush=True)
-    cf_proc = subprocess.Popen(
-        ["cloudflared", "tunnel", "--url", "http://localhost:3000"],
-        stderr=subprocess.PIPE,
-        stdout=subprocess.DEVNULL,
-    )
-
-    def capture_cf_url(proc):
-        url_found = False
-        for line in iter(proc.stderr.readline, b""):
-            line_str = line.decode("utf-8", errors="ignore")
-            match = re.search(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com", line_str)
-            if match and not url_found:
-                url_found = True
-                cf_url = match.group(0)
-                print(f"\033[32mdone\033[0m")
-                print(f"\n  \033[1mPublic URL:\033[0m \033[36m{cf_url}\033[0m\n")
-                cf_url_store["url"] = cf_url
-                try:
-                    data = json.dumps({"url": cf_url}).encode("utf-8")
-                    req = urllib.request.Request(
-                        "http://localhost:3000/api/cf-url",
-                        data=data,
-                        headers={"Content-Type": "application/json"},
-                    )
-                    urllib.request.urlopen(req, timeout=5)
-                except Exception:
-                    pass
-
-    capture_thread = threading.Thread(target=capture_cf_url, args=(cf_proc,), daemon=True)
-    capture_thread.start()
 
     cf_proc.wait()
     server_proc.terminate()

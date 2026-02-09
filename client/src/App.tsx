@@ -118,10 +118,13 @@ interface VideoCardProps {
   video: Video;
   onClick: () => void;
   onContextMenu: (e: React.MouseEvent, video: Video) => void;
+  placeholderImages: string[];
 }
 
-function VideoCard({ video, onClick, onContextMenu }: VideoCardProps) {
+function VideoCard({ video, onClick, onContextMenu, placeholderImages }: VideoCardProps) {
   const [isVisible, setIsVisible] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [placeholderSrc, setPlaceholderSrc] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -142,6 +145,12 @@ function VideoCard({ video, onClick, onContextMenu }: VideoCardProps) {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    if (video.thumbnail || placeholderSrc || placeholderImages.length === 0) return;
+    const randomIndex = Math.floor(Math.random() * placeholderImages.length);
+    setPlaceholderSrc(placeholderImages[randomIndex]);
+  }, [placeholderImages, placeholderSrc, video.thumbnail]);
+
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     onContextMenu(e, video);
@@ -152,7 +161,9 @@ function VideoCard({ video, onClick, onContextMenu }: VideoCardProps) {
       <div className="video-thumbnail">
         {isVisible ? (
           video.thumbnail ? (
-            <img src={video.thumbnail} alt={video.title} loading="lazy" />
+            <img src={video.thumbnail} alt="" loading="lazy" />
+          ) : placeholderSrc ? (
+            <img src={placeholderSrc} alt="" loading="lazy" />
           ) : (
             <div className="video-placeholder"></div>
           )
@@ -175,6 +186,7 @@ function App() {
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [search, setSearch] = useState("");
+  const [placeholderImages, setPlaceholderImages] = useState<string[]>([]);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
     x: 0,
@@ -196,6 +208,24 @@ function App() {
   } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<Plyr | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/placeholder-images")
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed to load placeholders"))))
+      .then((data) => {
+        if (!active) return;
+        if (Array.isArray(data?.images)) {
+          setPlaceholderImages(data.images);
+        }
+      })
+      .catch(() => {
+        if (active) setPlaceholderImages([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const fetchVideos = useCallback(() => {
     fetch("/api/videos")
@@ -458,7 +488,13 @@ function App() {
               {videos
                 .filter((v) => v.title.toLowerCase().includes(search.toLowerCase()))
                 .map((video) => (
-                <VideoCard key={video.id} video={video} onClick={() => openModal(video)} onContextMenu={openContextMenu} />
+                <VideoCard
+                  key={video.id}
+                  video={video}
+                  onClick={() => openModal(video)}
+                  onContextMenu={openContextMenu}
+                  placeholderImages={placeholderImages}
+                />
               ))}
             </div>
           )}
