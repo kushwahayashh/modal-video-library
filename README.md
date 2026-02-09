@@ -1,11 +1,11 @@
 # Video Library
 
-A self-hosted video library app that runs locally, on Modal, or in GitHub Codespaces.
+A self-hosted video library app that runs locally or on Modal with a Cloudflare tunnel.
 
 ## Tech Stack
 
-- **Frontend:** React + Vite + Tailwind CSS
-- **Backend:** Node.js + Fastify + SQLite
+- **Frontend:** React + Vite + TypeScript
+- **Backend:** Bun + Fastify
 - **Entry Point:** Python (for Modal compatibility)
 - **Tools:** ffmpeg, yt-dlp, aria2c, mediainfo, gallery-dl, cloudflared
 
@@ -14,16 +14,17 @@ A self-hosted video library app that runs locally, on Modal, or in GitHub Codesp
 ```
 ├── main.py           # Local entry point
 ├── modal_app.py      # Modal entry point (image + cloudflare tunnel)
-├── image.py          # Modal image definition (standalone)
-├── server/           # Node.js backend (Fastify)
+├── server/           # Bun + Fastify backend
 │   ├── package.json
 │   └── src/
 │       └── index.js
-└── client/           # React frontend (Vite + Tailwind)
+└── client/           # React + Vite frontend
     ├── package.json
     └── src/
-        ├── App.jsx
-        └── main.jsx
+        ├── App.tsx
+        ├── FileManager.tsx
+        ├── types.ts
+        └── utils.ts
 ```
 
 ## Running Locally
@@ -45,7 +46,7 @@ This will:
 1. Use pre-built image with all dependencies (fast!)
 2. Build the React client
 3. Start the Fastify server
-4. Create a cloudflare tunnel
+4. Create a Cloudflare tunnel
 5. Output a public URL (e.g., `https://xxx.trycloudflare.com`)
 
 **Note:** The URL only works while the container is running. Each run generates a new URL.
@@ -63,6 +64,7 @@ Videos and data are stored in a persistent Modal Volume (`video-library-data`):
 /data
 ├── videos/       # Downloaded videos
 ├── thumbnails/   # Generated thumbnails
+├── sprites/      # Sprite sheets + VTT files
 └── db/           # SQLite database
 ```
 
@@ -72,44 +74,26 @@ For frontend hot-reload during development:
 
 ```bash
 # Terminal 1: Start backend
-cd server && npm install && npm run start
+cd server && bun install && bun run start
 
 # Terminal 2: Start frontend dev server
-cd client && npm install && npm run dev
+cd client && bun install && bun run dev
 # Visit http://localhost:5173
 ```
 
-## Architecture
+## Features
 
-```
-┌─────────────────────────────────────────────────┐
-│  Python Entry (main.py / modal_app.py)          │
-│  - Local: runs npm start                        │
-│  - Modal: builds client + cloudflare tunnel     │
-└─────────────────────────────────────────────────┘
-          │
-          ▼
-┌─────────────────────────────────────────────────┐
-│  Node.js Backend (Fastify)                      │
-│  - REST API for video operations                │
-│  - Serves React build in production             │
-│  - Tools: ffmpeg, yt-dlp, aria2c                │
-└─────────────────────────────────────────────────┘
-          │
-          ▼
-┌─────────────────────────────────────────────────┐
-│  React Frontend                                 │
-│  - Video library UI                             │
-│  - Tailwind CSS styling                         │
-└─────────────────────────────────────────────────┘
-```
-
-## Features (Planned)
-
+- [x] Video library browsing
+- [x] Video streaming/playback (Plyr)
+- [x] Search
+- [x] Context menu (play, download, copy link, rename, delete, properties)
+- [x] Sprite generation (preview thumbnails on seek bar)
+  - Parallel ffmpeg frame extraction across CPU cores
+  - Real-time progress tracking (persists across page refresh)
+  - Plyr preview thumbnails via WebVTT
+- [x] File manager
+- [x] Web terminal
 - [ ] Video downloading (yt-dlp, aria2c)
-- [ ] Video library browsing
 - [ ] Metadata extraction
-- [ ] Thumbnail generation
-- [ ] Video streaming/playback
-- [ ] Search and filtering
+- [ ] Thumbnail generation for library grid
 - [ ] Tags and categories

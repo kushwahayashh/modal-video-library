@@ -14,7 +14,7 @@ const execFileAsync = promisify(execFile);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const app = Fastify({ logger: true, routerOptions: { maxParamLength: 500 } });
+const app = Fastify({ logger: false, routerOptions: { maxParamLength: 500 } });
 
 await app.register(cors, { origin: true });
 
@@ -128,7 +128,6 @@ app.post("/api/cf-url", async (request, reply) => {
     return reply.status(400).send({ error: "Invalid Cloudflare URL" });
   }
   cloudflareUrl = url.trim();
-  console.log("Cloudflare URL set:", cloudflareUrl);
   return { success: true, url: cloudflareUrl };
 });
 
@@ -253,6 +252,13 @@ app.post("/api/videos/:id/rename", async (request, reply) => {
   try {
     await fsp.rename(oldPath, newPath);
     const newId = toBase64Url(newFilename);
+
+    const oldSpriteDir = path.join(SPRITES_DIR, id);
+    const newSpriteDir = path.join(SPRITES_DIR, newId);
+    if (await fileExists(oldSpriteDir)) {
+      await fsp.rename(oldSpriteDir, newSpriteDir);
+    }
+
     return { success: true, id: newId, filename: newFilename };
   } catch (e) {
     console.error("Error renaming video:", e);
@@ -285,6 +291,9 @@ async function runSpriteGeneration(id, filename, filePath) {
   const title = path.basename(filename, ext);
   const job = { videoId: id, title, status: "extracting", current: 0, total: 0, error: null };
   spriteJobs.set(id, job);
+  const startTime = Date.now();
+
+  console.log(`  sprites: "${title}" — extracting frames...`);
 
   let progressInterval = null;
 
@@ -392,6 +401,7 @@ async function runSpriteGeneration(id, filename, filePath) {
     }
 
     job.status = "tiling";
+    console.log(`  sprites: "${title}" — ${frameCount} frames, tiling...`);
 
     const cols = 10;
     const rows = Math.ceil(frameCount / cols);
@@ -428,8 +438,10 @@ async function runSpriteGeneration(id, filename, filePath) {
     await fsp.rm(tempDir, { recursive: true });
 
     job.status = "done";
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`  sprites: "${title}" — done in ${elapsed}s`);
   } catch (e) {
-    console.error("Error generating sprites:", e);
+    console.error(`  sprites: "${title}" — failed: ${e.message}`);
     job.status = "error";
     job.error = "Failed to generate sprites";
   } finally {
@@ -761,9 +773,9 @@ app.setNotFoundHandler(async (request, reply) => {
 const start = async () => {
   try {
     await app.listen({ port: 3000, host: "0.0.0.0" });
-    console.log("Server running at http://localhost:3000");
+    console.log("Server running on :3000");
   } catch (err) {
-    app.log.error(err);
+    console.error("Failed to start server:", err.message);
     process.exit(1);
   }
 };

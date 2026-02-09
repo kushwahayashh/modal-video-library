@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { Search, Play, Download, Trash2, Edit3, Copy, Info, X, LayoutGrid } from "lucide-react";
+import { Search, Play, Download, Trash2, Edit3, Copy, Info, X, LayoutGrid, Check } from "lucide-react";
 // @ts-expect-error plyr types export both default and namespace which confuses bundler resolution
 import Plyr from "plyr";
 import "plyr/dist/plyr.css";
@@ -489,7 +489,15 @@ function App() {
       {selectedVideo && (
         <div className={`modal-overlay ${modalVisible ? 'visible' : ''}`} onClick={closeModal}>
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">{selectedVideo.title}</div>
+            <div className="modal-header">
+              <span>{selectedVideo.title}</span>
+              {selectedVideo.hasSprites && (
+                <span className="sprite-badge">
+                  <Check size={14} />
+                  Sprite Available
+                </span>
+              )}
+            </div>
             <div className="modal-player">
               <video ref={videoRef} playsInline>
                 <source src={`/api/stream/${selectedVideo.id}`} type="video/mp4" />
