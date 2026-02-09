@@ -7,6 +7,7 @@ import fs from "fs";
 import { promises as fsp } from "fs";
 import { fileURLToPath } from "url";
 import { execFile } from "child_process";
+import os from "os";
 import { promisify } from "util";
 
 const execFileAsync = promisify(execFile);
@@ -39,8 +40,9 @@ function fromBase64Url(b64) {
 const DATA_DIR = process.env.DATA_DIR || "/data";
 const VIDEOS_DIR = path.join(DATA_DIR, "videos");
 const THUMBNAILS_DIR = path.join(DATA_DIR, "thumbnails");
+const SPRITES_DIR = path.join(DATA_DIR, "sprites");
 
-[VIDEOS_DIR, THUMBNAILS_DIR].forEach((dir) => {
+[VIDEOS_DIR, THUMBNAILS_DIR, SPRITES_DIR].forEach((dir) => {
   if (!fs.existsSync(dir)) {
     try {
       fs.mkdirSync(dir, { recursive: true });
@@ -173,8 +175,9 @@ app.get("/api/videos", async () => {
 
       for (let i = 0; i < entries.length; i++) {
         const { file, ext, stats } = entries[i];
+        const videoId = toBase64Url(file);
         videos.push({
-          id: toBase64Url(file),
+          id: videoId,
           title: path.basename(file, ext),
           filename: file,
           size: formatBytes(stats.size),
@@ -182,6 +185,7 @@ app.get("/api/videos", async () => {
           createdAt: stats.birthtime,
           thumbnail: null,
           duration: durations[i],
+          hasSprites: fs.existsSync(path.join(SPRITES_DIR, videoId, "sprite.jpg")),
         });
       }
     }
@@ -272,6 +276,223 @@ app.delete("/api/videos/:id", async (request, reply) => {
     console.error("Error deleting video:", e);
     return reply.status(500).send({ error: "Failed to delete video" });
   }
+});
+
+const spriteJobs = new Map();
+
+async function runSpriteGeneration(id, filename, filePath) {
+  const ext = path.extname(filename);
+  const title = path.basename(filename, ext);
+  const job = { videoId: id, title, status: "extracting", current: 0, total: 0, error: null };
+  spriteJobs.set(id, job);
+
+  let progressInterval = null;
+
+  try {
+    const spriteDir = path.join(SPRITES_DIR, id);
+    const tempDir = path.join(spriteDir, "temp");
+
+    if (await fileExists(spriteDir)) {
+      await fsp.rm(spriteDir, { recursive: true });
+    }
+
+    await fsp.mkdir(tempDir, { recursive: true });
+
+    const { stdout: durationOut } = await execFileAsync("ffprobe", [
+      "-v", "error",
+      "-show_entries", "format=duration",
+      "-of", "default=noprint_wrappers=1:nokey=1",
+      filePath,
+    ]);
+
+    const durationSecs = parseFloat(durationOut.trim());
+    if (isNaN(durationSecs)) {
+      job.status = "error";
+      job.error = "Could not determine video duration";
+      return;
+    }
+
+    let interval;
+    if (durationSecs < 60) interval = 1;
+    else if (durationSecs < 600) interval = 2;
+    else if (durationSecs < 3600) interval = 5;
+    else interval = 10;
+
+    const expectedFrames = Math.ceil(durationSecs / interval);
+    job.total = expectedFrames;
+
+    const workerCount = Math.min(Math.max(Math.floor(os.cpus().length / 2), 2), 8);
+    const segmentDuration = durationSecs / workerCount;
+
+    const segments = [];
+    for (let w = 0; w < workerCount; w++) {
+      const segStart = w * segmentDuration;
+      const segEnd = Math.min((w + 1) * segmentDuration, durationSecs);
+      const firstFrame = Math.floor(segStart / interval);
+      const lastFrame = Math.ceil(segEnd / interval) - 1;
+      if (lastFrame < firstFrame) continue;
+      const segDir = path.join(tempDir, `seg_${w}`);
+      segments.push({ segStart, segEnd, firstFrame, segDir });
+    }
+
+    await Promise.all(segments.map((s) => fsp.mkdir(s.segDir, { recursive: true })));
+
+    const workerTasks = segments.map((s) =>
+      execFileAsync("ffmpeg", [
+        "-ss", String(s.segStart),
+        "-i", filePath,
+        "-t", String(s.segEnd - s.segStart),
+        "-vf", `fps=1/${interval},scale=320:180`,
+        "-q:v", "2",
+        path.join(s.segDir, "frame_%04d.jpg"),
+      ])
+    );
+
+    progressInterval = setInterval(async () => {
+      try {
+        let count = 0;
+        for (const s of segments) {
+          try {
+            const files = await fsp.readdir(s.segDir);
+            count += files.filter((f) => f.endsWith(".jpg")).length;
+          } catch {}
+        }
+        job.current = count;
+      } catch {}
+    }, 500);
+
+    await Promise.all(workerTasks);
+
+    clearInterval(progressInterval);
+    progressInterval = null;
+
+    let globalIndex = 1;
+    for (const s of segments) {
+      const segFrames = (await fsp.readdir(s.segDir))
+        .filter((f) => f.endsWith(".jpg"))
+        .sort();
+      for (const frame of segFrames) {
+        const dest = path.join(tempDir, `frame_${String(globalIndex).padStart(4, "0")}.jpg`);
+        await fsp.rename(path.join(s.segDir, frame), dest);
+        globalIndex++;
+      }
+      await fsp.rm(s.segDir, { recursive: true });
+    }
+
+    const frames = (await fsp.readdir(tempDir)).filter((f) => f.startsWith("frame_") && f.endsWith(".jpg"));
+    const frameCount = frames.length;
+    job.current = frameCount;
+    job.total = frameCount;
+
+    if (frameCount === 0) {
+      await fsp.rm(spriteDir, { recursive: true });
+      job.status = "error";
+      job.error = "No frames extracted";
+      return;
+    }
+
+    job.status = "tiling";
+
+    const cols = 10;
+    const rows = Math.ceil(frameCount / cols);
+
+    await execFileAsync("ffmpeg", [
+      "-i", path.join(tempDir, "frame_%04d.jpg"),
+      "-filter_complex", `tile=${cols}x${rows}:padding=0`,
+      "-q:v", "2",
+      path.join(spriteDir, "sprite.jpg"),
+    ]);
+
+    const formatTime = (s) => {
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = Math.floor(s % 60);
+      const ms = Math.round((s % 1) * 1000);
+      return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
+    };
+
+    let vtt = "WEBVTT\n\n";
+    for (let i = 1; i <= frameCount; i++) {
+      const startTime = (i - 1) * interval;
+      if (startTime >= durationSecs) break;
+      const endTime = Math.min(i * interval, durationSecs);
+      const x = ((i - 1) % cols) * 320;
+      const y = Math.floor((i - 1) / cols) * 180;
+
+      vtt += `${i}\n`;
+      vtt += `${formatTime(startTime)} --> ${formatTime(endTime)}\n`;
+      vtt += `/api/sprites/${id}/image#xywh=${x},${y},320,180\n\n`;
+    }
+
+    await fsp.writeFile(path.join(spriteDir, "sprite.vtt"), vtt);
+    await fsp.rm(tempDir, { recursive: true });
+
+    job.status = "done";
+  } catch (e) {
+    console.error("Error generating sprites:", e);
+    job.status = "error";
+    job.error = "Failed to generate sprites";
+  } finally {
+    if (progressInterval) clearInterval(progressInterval);
+    setTimeout(() => spriteJobs.delete(id), 10000);
+  }
+}
+
+app.post("/api/videos/:id/sprites", async (request, reply) => {
+  const { id } = request.params;
+  const filename = fromBase64Url(id);
+  const filePath = path.join(VIDEOS_DIR, filename);
+
+  if (!(await fileExists(filePath))) {
+    return reply.status(404).send({ error: "Video not found" });
+  }
+
+  if (spriteJobs.has(id) && spriteJobs.get(id).status === "extracting") {
+    return reply.status(409).send({ error: "Sprite generation already in progress" });
+  }
+
+  runSpriteGeneration(id, filename, filePath);
+
+  return { success: true, message: "Sprite generation started" };
+});
+
+app.get("/api/sprites/progress", async (request, reply) => {
+  const jobs = [];
+  for (const [id, job] of spriteJobs) {
+    jobs.push({ ...job });
+  }
+  return { jobs };
+});
+
+app.get("/api/sprites/:id/image", async (request, reply) => {
+  const { id } = request.params;
+  const spritePath = path.join(SPRITES_DIR, id, "sprite.jpg");
+
+  if (!(await fileExists(spritePath))) {
+    return reply.status(404).send({ error: "Sprite not found" });
+  }
+
+  return reply.type("image/jpeg").send(fs.createReadStream(spritePath));
+});
+
+app.get("/api/sprites/:id/vtt", async (request, reply) => {
+  const { id } = request.params;
+  const vttPath = path.join(SPRITES_DIR, id, "sprite.vtt");
+
+  if (!(await fileExists(vttPath))) {
+    return reply.status(404).send({ error: "Sprite VTT not found" });
+  }
+
+  return reply.type("text/vtt").send(fs.createReadStream(vttPath));
+});
+
+app.get("/api/sprites/:id/status", async (request, reply) => {
+  const { id } = request.params;
+  const spriteExists =
+    (await fileExists(path.join(SPRITES_DIR, id, "sprite.jpg"))) &&
+    (await fileExists(path.join(SPRITES_DIR, id, "sprite.vtt")));
+
+  return { exists: spriteExists };
 });
 
 app.get("/api/stream/:id", async (request, reply) => {

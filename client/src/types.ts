@@ -7,6 +7,7 @@ export interface Video {
   createdAt: string;
   thumbnail: string | null;
   duration: string | null;
+  hasSprites?: boolean;
 }
 
 export interface FileItem {

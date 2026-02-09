@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { Search, Play, Download, Trash2, Edit3, Copy, Info, X } from "lucide-react";
+import { Search, Play, Download, Trash2, Edit3, Copy, Info, X, LayoutGrid } from "lucide-react";
 // @ts-expect-error plyr types export both default and namespace which confuses bundler resolution
 import Plyr from "plyr";
 import "plyr/dist/plyr.css";
@@ -87,6 +87,7 @@ function ContextMenu({ state, onClose, onAction }: ContextMenuProps) {
     { id: "copy-link", label: "Copy Link", icon: Copy },
     { id: "rename", label: "Rename", icon: Edit3 },
     { id: "info", label: "Properties", icon: Info },
+    { id: "sprites", label: state.video?.hasSprites ? "Regenerate Sprites" : "Generate Sprites", icon: LayoutGrid },
     { id: "delete", label: "Delete", icon: Trash2, danger: true },
   ];
 
@@ -185,6 +186,14 @@ function App() {
   const [renameValue, setRenameValue] = useState("");
   const [videoProps, setVideoProps] = useState<VideoProperties | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [spriteProgress, setSpriteProgress] = useState<{
+    videoId: string;
+    title: string;
+    status: string;
+    current: number;
+    total: number;
+    error: string | null;
+  } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<Plyr | null>(null);
 
@@ -279,6 +288,49 @@ function App() {
     if (e.key === "Escape") closeActionModal();
   };
 
+  const generateSprites = async (video: Video) => {
+    try {
+      const res = await fetch(`/api/videos/${video.id}/sprites`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to generate sprites");
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to generate sprites");
+    }
+  };
+
+  useEffect(() => {
+    const pollProgress = async () => {
+      try {
+        const res = await fetch("/api/sprites/progress");
+        if (!res.ok) return;
+        const data = await res.json();
+        const active = data.jobs.find(
+          (j: { status: string }) => j.status === "extracting" || j.status === "tiling"
+        );
+        if (active) {
+          setSpriteProgress(active);
+        } else {
+          if (spriteProgress) {
+            const finished = data.jobs.find(
+              (j: { status: string }) => j.status === "done" || j.status === "error"
+            );
+            if (finished?.status === "error") {
+              alert(finished.error || "Sprite generation failed");
+            }
+            fetchVideos();
+          }
+          setSpriteProgress(null);
+        }
+      } catch {}
+    };
+
+    pollProgress();
+    const interval = setInterval(pollProgress, 1000);
+    return () => clearInterval(interval);
+  }, [spriteProgress, fetchVideos]);
+
   const handleContextAction = (action: string, video: Video) => {
     switch (action) {
       case "play":
@@ -295,6 +347,9 @@ function App() {
         break;
       case "info":
         openActionModal("properties", video);
+        break;
+      case "sprites":
+        generateSprites(video);
         break;
       case "delete":
         openActionModal("delete", video);
@@ -331,9 +386,25 @@ function App() {
 
   useEffect(() => {
     if (selectedVideo && videoRef.current && !playerRef.current) {
+      if (selectedVideo.hasSprites) {
+        const existingTrack = videoRef.current.querySelector('track[kind="metadata"]');
+        if (!existingTrack) {
+          const track = document.createElement('track');
+          track.kind = 'metadata';
+          track.label = 'thumbnails';
+          track.src = `/api/sprites/${selectedVideo.id}/vtt`;
+          track.default = true;
+          videoRef.current.appendChild(track);
+        }
+      }
+
       playerRef.current = new Plyr(videoRef.current, {
         controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'fullscreen'],
         keyboard: { focused: true, global: true },
+        previewThumbnails: selectedVideo.hasSprites ? {
+          enabled: true,
+          src: `/api/sprites/${selectedVideo.id}/vtt`,
+        } : { enabled: false },
       });
     }
   }, [selectedVideo]);
@@ -395,6 +466,25 @@ function App() {
       </main>
 
       <ContextMenu state={contextMenu} onClose={closeContextMenu} onAction={handleContextAction} />
+
+      {spriteProgress && (
+        <div className="sprite-toast">
+          <div className="sprite-toast-title">{spriteProgress.title}</div>
+          <div className="sprite-toast-detail">
+            {spriteProgress.status === "extracting"
+              ? `Extracting frames: ${spriteProgress.current}/${spriteProgress.total}`
+              : "Tiling sprite sheet..."}
+          </div>
+          {spriteProgress.status === "extracting" && spriteProgress.total > 0 && (
+            <div className="sprite-toast-bar">
+              <div
+                className="sprite-toast-bar-fill"
+                style={{ width: `${Math.round((spriteProgress.current / spriteProgress.total) * 100)}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {selectedVideo && (
         <div className={`modal-overlay ${modalVisible ? 'visible' : ''}`} onClick={closeModal}>
