@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { Search, Play, Download, Trash2, Edit3, Copy, Info, X, LayoutGrid, Check } from "lucide-react";
+import { Search, Play, Download, Trash2, Edit3, Copy, Info, X, LayoutGrid, Check, Image } from "lucide-react";
 // @ts-expect-error plyr types export both default and namespace which confuses bundler resolution
 import Plyr from "plyr";
 import "plyr/dist/plyr.css";
@@ -15,10 +15,38 @@ interface ContextMenuState {
   video: Video | null;
 }
 
-type ActionModalType = "rename" | "delete" | "properties" | null;
+type ActionModalType = "rename" | "delete" | "properties" | "thumbnail" | null;
+
+function getStablePlaceholder(videoId: string, placeholders: string[]): string | null {
+  if (placeholders.length === 0) return null;
+  let hash = 0;
+  for (let i = 0; i < videoId.length; i += 1) {
+    hash = (hash * 31 + videoId.charCodeAt(i)) >>> 0;
+  }
+  return placeholders[hash % placeholders.length] || null;
+}
+
+function saveThumbnailToServer(videoId: string, imageUrl: string) {
+  fetch("/api/thumbnail-map", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ videoId, imageUrl }),
+  }).catch(() => {});
+}
 
 interface VideoProperties extends Video {
   modifiedAt?: string;
+  resolution?: string;
+  videoCodec?: string;
+  videoBitrate?: string;
+  framerate?: string;
+  pixelFormat?: string;
+  audioCodec?: string;
+  audioBitrate?: string;
+  audioChannels?: string;
+  sampleRate?: string;
+  container?: string;
+  totalBitrate?: string;
 }
 
 interface ContextMenuProps {
@@ -88,6 +116,7 @@ function ContextMenu({ state, onClose, onAction }: ContextMenuProps) {
     { id: "rename", label: "Rename", icon: Edit3 },
     { id: "info", label: "Properties", icon: Info },
     { id: "sprites", label: state.video?.hasSprites ? "Regenerate Sprites" : "Generate Sprites", icon: LayoutGrid },
+    { id: "thumbnail", label: "Change Thumbnail", icon: Image },
     { id: "delete", label: "Delete", icon: Trash2, danger: true },
   ];
 
@@ -119,13 +148,14 @@ interface VideoCardProps {
   onClick: () => void;
   onContextMenu: (e: React.MouseEvent, video: Video) => void;
   placeholderImages: string[];
+  thumbnailOverrides: Record<string, string>;
 }
 
-function VideoCard({ video, onClick, onContextMenu, placeholderImages }: VideoCardProps) {
+function VideoCard({ video, onClick, onContextMenu, placeholderImages, thumbnailOverrides }: VideoCardProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
-  const [placeholderSrc, setPlaceholderSrc] = useState<string | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const prevSrcRef = useRef<string | null>(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -145,11 +175,13 @@ function VideoCard({ video, onClick, onContextMenu, placeholderImages }: VideoCa
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
-    if (video.thumbnail || placeholderSrc || placeholderImages.length === 0) return;
-    const randomIndex = Math.floor(Math.random() * placeholderImages.length);
-    setPlaceholderSrc(placeholderImages[randomIndex]);
-  }, [placeholderImages, placeholderSrc, video.thumbnail]);
+  const fallbackPlaceholder = getStablePlaceholder(video.id, placeholderImages);
+  const imgSrc = video.thumbnail || thumbnailOverrides[video.id] || fallbackPlaceholder;
+
+  if (imgSrc !== prevSrcRef.current) {
+    prevSrcRef.current = imgSrc;
+    if (imageLoaded) setImageLoaded(false);
+  }
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -159,16 +191,15 @@ function VideoCard({ video, onClick, onContextMenu, placeholderImages }: VideoCa
   return (
     <div ref={cardRef} className="video-card" onClick={onClick} onContextMenu={handleContextMenu}>
       <div className="video-thumbnail">
-        {isVisible ? (
-          video.thumbnail ? (
-            <img src={video.thumbnail} alt="" loading="lazy" />
-          ) : placeholderSrc ? (
-            <img src={placeholderSrc} alt="" loading="lazy" />
-          ) : (
-            <div className="video-placeholder"></div>
-          )
-        ) : (
-          <div className="video-placeholder skeleton"></div>
+        <div className="video-placeholder skeleton"></div>
+        {isVisible && imgSrc && (
+          <img
+            src={imgSrc}
+            alt=""
+            loading="lazy"
+            className={`video-thumb-img ${imageLoaded ? "loaded" : ""}`}
+            onLoad={() => setImageLoaded(true)}
+          />
         )}
         {video.duration && <div className="video-duration">{video.duration}</div>}
       </div>
@@ -187,6 +218,7 @@ function App() {
   const [modalVisible, setModalVisible] = useState(false);
   const [search, setSearch] = useState("");
   const [placeholderImages, setPlaceholderImages] = useState<string[]>([]);
+  const [thumbnailOverrides, setThumbnailOverrides] = useState<Record<string, string>>({});
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
     x: 0,
@@ -208,23 +240,40 @@ function App() {
   } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<Plyr | null>(null);
+  const hasVideoDetails = !!(
+    videoProps?.resolution ||
+    videoProps?.videoCodec ||
+    videoProps?.videoBitrate ||
+    videoProps?.framerate ||
+    videoProps?.pixelFormat
+  );
+  const hasAudioDetails = !!(
+    videoProps?.audioCodec ||
+    videoProps?.audioBitrate ||
+    videoProps?.audioChannels ||
+    videoProps?.sampleRate
+  );
+
+  const updateThumbnailOverride = useCallback((videoId: string, imageUrl: string) => {
+    setThumbnailOverrides((prev) => ({ ...prev, [videoId]: imageUrl }));
+    saveThumbnailToServer(videoId, imageUrl);
+  }, []);
 
   useEffect(() => {
     let active = true;
-    fetch("/api/placeholder-images")
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Failed to load placeholders"))))
-      .then((data) => {
-        if (!active) return;
-        if (Array.isArray(data?.images)) {
-          setPlaceholderImages(data.images);
-        }
-      })
-      .catch(() => {
-        if (active) setPlaceholderImages([]);
-      });
-    return () => {
-      active = false;
-    };
+    Promise.all([
+      fetch("/api/placeholder-images").then((r) => r.ok ? r.json() : { images: [] }),
+      fetch("/api/thumbnail-map").then((r) => r.ok ? r.json() : {}),
+    ]).then(([imgData, mapData]) => {
+      if (!active) return;
+      if (Array.isArray(imgData?.images)) setPlaceholderImages(imgData.images);
+      if (mapData && typeof mapData === "object" && !Array.isArray(mapData)) {
+        setThumbnailOverrides(mapData as Record<string, string>);
+      }
+    }).catch(() => {
+      if (active) setPlaceholderImages([]);
+    });
+    return () => { active = false; };
   }, []);
 
   const fetchVideos = useCallback(() => {
@@ -259,6 +308,7 @@ function App() {
     if (type === "rename") {
       setRenameValue(video.title);
     } else if (type === "properties") {
+      setVideoProps(null);
       fetch(`/api/videos/${video.id}`)
         .then((r) => r.json())
         .then((data) => setVideoProps(data))
@@ -381,6 +431,10 @@ function App() {
       case "sprites":
         generateSprites(video);
         break;
+      case "thumbnail":
+        setActionVideo(video);
+        setActionModal("thumbnail");
+        break;
       case "delete":
         openActionModal("delete", video);
         break;
@@ -494,6 +548,7 @@ function App() {
                   onClick={() => openModal(video)}
                   onContextMenu={openContextMenu}
                   placeholderImages={placeholderImages}
+                  thumbnailOverrides={thumbnailOverrides}
                 />
               ))}
             </div>
@@ -545,7 +600,7 @@ function App() {
 
       {actionModal && actionVideo && (
         <div className="action-modal-overlay" onClick={closeActionModal}>
-          <div className="action-modal" onClick={(e) => e.stopPropagation()}>
+          <div className={`action-modal ${actionModal === "thumbnail" ? "thumbnail-modal" : actionModal === "properties" ? "properties-modal" : ""}`} onClick={(e) => e.stopPropagation()}>
             <button className="action-modal-close" onClick={closeActionModal}>
               <X size={20} />
             </button>
@@ -589,41 +644,164 @@ function App() {
 
             {actionModal === "properties" && (
               <>
-                <div className="action-modal-title">Video Properties</div>
-                <div className="action-modal-properties">
-                  <div className="prop-row">
-                    <span className="prop-label">Title</span>
-                    <span className="prop-value">{videoProps?.title || actionVideo.title}</span>
-                  </div>
-                  <div className="prop-row">
-                    <span className="prop-label">Filename</span>
-                    <span className="prop-value">{videoProps?.filename || actionVideo.filename}</span>
-                  </div>
-                  <div className="prop-row">
-                    <span className="prop-label">Size</span>
-                    <span className="prop-value">
-                      {videoProps?.sizeBytes ? formatBytes(videoProps.sizeBytes) : actionVideo.size}
-                    </span>
-                  </div>
-                  <div className="prop-row">
-                    <span className="prop-label">Duration</span>
-                    <span className="prop-value">{videoProps?.duration || actionVideo.duration || "Unknown"}</span>
-                  </div>
-                  <div className="prop-row">
-                    <span className="prop-label">Created</span>
-                    <span className="prop-value">
-                      {formatDate(videoProps?.createdAt || actionVideo.createdAt)}
-                    </span>
-                  </div>
-                  {videoProps?.modifiedAt && (
-                    <div className="prop-row">
-                      <span className="prop-label">Modified</span>
-                      <span className="prop-value">{formatDate(videoProps.modifiedAt)}</span>
+                <div className="prop-header">
+                  <div className="prop-label">Properties</div>
+                  <div className="prop-title">{actionVideo.title}</div>
+                  <div className="prop-filename">{actionVideo.filename}</div>
+                </div>
+                <div className="prop-body">
+                  {!videoProps ? (
+                    <div className="prop-skeleton">
+                      <div className="prop-summary-skel">
+                        <div className="prop-skel-block" />
+                        <div className="prop-skel-block" />
+                        <div className="prop-skel-block" />
+                        <div className="prop-skel-block" />
+                      </div>
+                      <div className="prop-section-skel-grid">
+                        <div className="prop-section-skel" />
+                        <div className="prop-section-skel" />
+                      </div>
+                      <div className="prop-meta-skel" />
+                    </div>
+                  ) : (
+                    <div className="prop-content">
+                      <div className="prop-summary">
+                        <div className="prop-summary-item">
+                          <span className="prop-summary-label">Size</span>
+                          <span className="prop-summary-value">
+                            {videoProps.sizeBytes ? formatBytes(videoProps.sizeBytes) : actionVideo.size || "—"}
+                          </span>
+                        </div>
+                        <div className="prop-summary-item">
+                          <span className="prop-summary-label">Duration</span>
+                          <span className="prop-summary-value">{videoProps.duration || actionVideo.duration || "—"}</span>
+                        </div>
+                        <div className="prop-summary-item">
+                          <span className="prop-summary-label">Container</span>
+                          <span className="prop-summary-value">{videoProps.container || "—"}</span>
+                        </div>
+                        <div className="prop-summary-item">
+                          <span className="prop-summary-label">Bitrate</span>
+                          <span className="prop-summary-value">{videoProps.totalBitrate || "—"}</span>
+                        </div>
+                      </div>
+
+                      {(hasVideoDetails || hasAudioDetails) ? (
+                        <div className="prop-sections">
+                          {hasVideoDetails && (
+                            <div className="prop-section">
+                              <div className="prop-section-title">Video</div>
+                              <div className="prop-kv">
+                                {videoProps.resolution && (
+                                  <div className="prop-kv-row">
+                                    <span className="prop-kv-label">Resolution</span>
+                                    <span className="prop-kv-value">{videoProps.resolution}</span>
+                                  </div>
+                                )}
+                                {videoProps.videoCodec && (
+                                  <div className="prop-kv-row">
+                                    <span className="prop-kv-label">Codec</span>
+                                    <span className="prop-pill">{videoProps.videoCodec.toUpperCase()}</span>
+                                  </div>
+                                )}
+                                {videoProps.framerate && (
+                                  <div className="prop-kv-row">
+                                    <span className="prop-kv-label">Framerate</span>
+                                    <span className="prop-kv-value">{videoProps.framerate}</span>
+                                  </div>
+                                )}
+                                {videoProps.videoBitrate && (
+                                  <div className="prop-kv-row">
+                                    <span className="prop-kv-label">Video bitrate</span>
+                                    <span className="prop-kv-value">{videoProps.videoBitrate}</span>
+                                  </div>
+                                )}
+                                {videoProps.pixelFormat && (
+                                  <div className="prop-kv-row">
+                                    <span className="prop-kv-label">Pixel format</span>
+                                    <span className="prop-kv-value">{videoProps.pixelFormat}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          {hasAudioDetails && (
+                            <div className="prop-section">
+                              <div className="prop-section-title">Audio</div>
+                              <div className="prop-kv">
+                                {videoProps.audioCodec && (
+                                  <div className="prop-kv-row">
+                                    <span className="prop-kv-label">Codec</span>
+                                    <span className="prop-pill">{videoProps.audioCodec.toUpperCase()}</span>
+                                  </div>
+                                )}
+                                {videoProps.audioChannels && (
+                                  <div className="prop-kv-row">
+                                    <span className="prop-kv-label">Channels</span>
+                                    <span className="prop-kv-value">{videoProps.audioChannels}</span>
+                                  </div>
+                                )}
+                                {videoProps.sampleRate && (
+                                  <div className="prop-kv-row">
+                                    <span className="prop-kv-label">Sample rate</span>
+                                    <span className="prop-kv-value">{videoProps.sampleRate}</span>
+                                  </div>
+                                )}
+                                {videoProps.audioBitrate && (
+                                  <div className="prop-kv-row">
+                                    <span className="prop-kv-label">Audio bitrate</span>
+                                    <span className="prop-kv-value">{videoProps.audioBitrate}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="prop-empty">No stream details available.</div>
+                      )}
+
+                      <div className="prop-meta">
+                        <div className="prop-meta-row">
+                          <span className="prop-meta-label">Created</span>
+                          <span className="prop-meta-value">{formatDate(videoProps.createdAt || actionVideo.createdAt)}</span>
+                        </div>
+                        {videoProps.modifiedAt && (
+                          <div className="prop-meta-row">
+                            <span className="prop-meta-label">Modified</span>
+                            <span className="prop-meta-value">{formatDate(videoProps.modifiedAt)}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
                 <div className="action-modal-actions">
                   <button className="action-btn primary" onClick={closeActionModal}>Close</button>
+                </div>
+              </>
+            )}
+
+            {actionModal === "thumbnail" && (
+              <>
+                <div className="action-modal-title">Change Thumbnail</div>
+                <div className="thumbnail-picker-grid">
+                  {placeholderImages.map((img) => (
+                    <button
+                      key={img}
+                      className={`thumbnail-picker-item ${thumbnailOverrides[actionVideo!.id] === img ? "active" : ""}`}
+                      onClick={() => {
+                        updateThumbnailOverride(actionVideo!.id, img);
+                        closeActionModal();
+                      }}
+                    >
+                      <img src={img} alt="" />
+                    </button>
+                  ))}
+                </div>
+                <div className="action-modal-actions">
+                  <button className="action-btn secondary" onClick={closeActionModal}>Cancel</button>
                 </div>
               </>
             )}

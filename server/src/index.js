@@ -139,11 +139,40 @@ app.get("/api/placeholder-images", async () => {
     const entries = await fsp.readdir(PLACEHOLDERS_DIR, { withFileTypes: true });
     const images = entries
       .filter((entry) => entry.isFile() && PLACEHOLDER_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
-      .map((entry) => `/api/placeholder-images/${encodeURIComponent(entry.name)}`);
+      .map((entry) => `/api/placeholder-images/${encodeURIComponent(entry.name)}`)
+      .sort();
     return { images };
   } catch (e) {
     return { images: [] };
   }
+});
+
+const THUMB_MAP_PATH = path.join(DATA_DIR, "thumbnail-map.json");
+
+async function readThumbMap() {
+  try {
+    const raw = await fsp.readFile(THUMB_MAP_PATH, "utf-8");
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+async function writeThumbMap(map) {
+  await fsp.writeFile(THUMB_MAP_PATH, JSON.stringify(map));
+}
+
+app.get("/api/thumbnail-map", async () => {
+  return await readThumbMap();
+});
+
+app.post("/api/thumbnail-map", async (request) => {
+  const { videoId, imageUrl } = request.body || {};
+  if (!videoId || !imageUrl) return { error: "videoId and imageUrl required" };
+  const map = await readThumbMap();
+  map[videoId] = imageUrl;
+  await writeThumbMap(map);
+  return { success: true };
 });
 
 app.post("/api/cf-url", async (request, reply) => {
@@ -221,6 +250,71 @@ app.get("/api/videos", async () => {
   return { videos, total: videos.length };
 });
 
+function formatBitrate(bps) {
+  const n = parseFloat(bps);
+  if (isNaN(n)) return null;
+  if (n >= 1000000) {
+    const val = (n / 1000000).toFixed(1);
+    return val.endsWith(".0") ? val.slice(0, -2) + " Mbps" : val + " Mbps";
+  }
+  if (n >= 1000) return Math.round(n / 1000) + " Kbps";
+  return n + " bps";
+}
+
+function formatChannels(ch) {
+  const n = parseInt(ch, 10);
+  if (n === 1) return "Mono";
+  if (n === 2) return "Stereo";
+  if (n === 6) return "5.1";
+  if (n === 8) return "7.1";
+  return String(n);
+}
+
+async function getVideoMetadata(filePath) {
+  try {
+    const { stdout } = await execFileAsync("ffprobe", [
+      "-v", "error",
+      "-show_format",
+      "-show_streams",
+      "-of", "json",
+      filePath,
+    ]);
+    const probe = JSON.parse(stdout);
+    const streams = probe.streams || [];
+    const format = probe.format || {};
+    const videoStream = streams.find((s) => s.codec_type === "video");
+    const audioStream = streams.find((s) => s.codec_type === "audio");
+
+    const meta = {};
+
+    if (videoStream) {
+      meta.resolution = `${videoStream.width}x${videoStream.height}`;
+      meta.videoCodec = videoStream.codec_name;
+      const vBitrate = videoStream.bit_rate || format.bit_rate;
+      meta.videoBitrate = vBitrate ? formatBitrate(vBitrate) : null;
+      if (videoStream.r_frame_rate) {
+        const [num, den] = videoStream.r_frame_rate.split("/").map(Number);
+        meta.framerate = den ? (num / den).toFixed(2).replace(/\.?0+$/, "") + " fps" : null;
+      }
+      meta.pixelFormat = videoStream.pix_fmt;
+    }
+
+    if (audioStream) {
+      meta.audioCodec = audioStream.codec_name;
+      meta.audioBitrate = audioStream.bit_rate ? formatBitrate(audioStream.bit_rate) : null;
+      meta.audioChannels = audioStream.channels != null ? formatChannels(audioStream.channels) : null;
+      meta.sampleRate = audioStream.sample_rate ? audioStream.sample_rate + " Hz" : null;
+    }
+
+    meta.container = format.format_long_name || null;
+    meta.totalBitrate = format.bit_rate ? formatBitrate(format.bit_rate) : null;
+
+    return meta;
+  } catch {
+    return {};
+  }
+}
+
 app.get("/api/videos/:id", async (request, reply) => {
   const { id } = request.params;
   const filename = fromBase64Url(id);
@@ -232,6 +326,10 @@ app.get("/api/videos/:id", async (request, reply) => {
 
   const stats = await fsp.stat(filePath);
   const ext = path.extname(filename);
+  const [duration, metadata] = await Promise.all([
+    getVideoDuration(filePath),
+    getVideoMetadata(filePath),
+  ]);
 
   return {
     id,
@@ -241,7 +339,8 @@ app.get("/api/videos/:id", async (request, reply) => {
     sizeBytes: stats.size,
     createdAt: stats.birthtime,
     modifiedAt: stats.mtime,
-    duration: await getVideoDuration(filePath),
+    duration,
+    ...metadata,
   };
 });
 
@@ -281,6 +380,21 @@ app.post("/api/videos/:id/rename", async (request, reply) => {
     const newSpriteDir = path.join(SPRITES_DIR, newId);
     if (await fileExists(oldSpriteDir)) {
       await fsp.rename(oldSpriteDir, newSpriteDir);
+      const vttPath = path.join(newSpriteDir, "sprite.vtt");
+      if (await fileExists(vttPath)) {
+        try {
+          const vtt = await fsp.readFile(vttPath, "utf-8");
+          const updated = vtt.replaceAll(
+            `/api/sprites/${id}/image`,
+            `/api/sprites/${newId}/image`
+          );
+          if (updated !== vtt) {
+            await fsp.writeFile(vttPath, updated);
+          }
+        } catch (e) {
+          console.warn("Failed to update sprite VTT after rename:", e);
+        }
+      }
     }
 
     return { success: true, id: newId, filename: newFilename };
