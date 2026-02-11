@@ -199,7 +199,6 @@
 
 .video-card:hover {
   background: var(--bg-card-hover);
-  border-color: var(--text-muted);
 }
 
 .video-thumbnail {
