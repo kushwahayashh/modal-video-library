@@ -17,6 +17,8 @@ This catalog covers all tracked repository files (excluding generated folders li
 - `server/src/index.js`: main Fastify server with API + WS routes.
 - `server/src/terminal.html`: standalone terminal client for `/terminal`.
 - `server/src/manager.html`: standalone file-manager utility page.
+- `server/tests/thumbnail-map.contract.test.js`: contract tests for `GET/POST /api/thumbnail-map` using Fastify inject.
+- `server/tests/video-rename-delete.contract.test.js`: contract tests for rename/delete side-effects on sprite and thumbnail metadata.
 
 ## Frontend Build and Config (`client/`)
 - `client/package.json`: frontend scripts and dependencies.
@@ -34,6 +36,8 @@ This catalog covers all tracked repository files (excluding generated folders li
 - `client/src/App.css`: video library styling.
 - `client/src/FileManager.tsx`: React file manager page.
 - `client/src/FileManager.css`: file manager styling.
+- `client/src/components/ThumbnailPicker.tsx`: thumbnail selection component with loading skeletons.
+- `client/src/hooks/useSpriteProgress.ts`: sprite progress polling hook.
 - `client/src/index.css`: global tokens and reset styles.
 - `client/src/types.ts`: shared TS interfaces.
 - `client/src/utils.ts`: reusable formatting helpers.

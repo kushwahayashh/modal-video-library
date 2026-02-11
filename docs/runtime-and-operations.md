@@ -22,6 +22,8 @@
 ## Backend Runtime Variables
 - `DATA_DIR`: root data folder for videos, sprites, thumbnails, and map file.
 - `SHELL`: terminal shell binary for `/ws/terminal`.
+- `PORT`: backend listen port (default `3000`).
+- `NO_AUTO_LISTEN`: when set to `1`, disables automatic `listen()` to support in-process contract tests.
 
 ## Modal Runtime Notes
 - Persistent volume: `video-library-data` mounted to `/data`.
@@ -38,3 +40,4 @@
 - Duration cache invalidates by file `mtime` and path.
 - If `client/dist` is absent, backend static serving for SPA is skipped.
 - Local environment without `/data` may limit media features unless `DATA_DIR` is set.
+- `server` tests require backend dependencies installed in `server/node_modules`.

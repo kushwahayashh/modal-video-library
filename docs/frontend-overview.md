@@ -15,8 +15,10 @@
   - `/manager` -> `FileManager` (`client/src/FileManager.tsx`)
 
 ## Source File Responsibilities
-- `client/src/App.tsx`: video library page, player modal, context menu, actions.
+- `client/src/App.tsx`: video library page orchestration, modal routing, and action wiring.
 - `client/src/FileManager.tsx`: filesystem browser and file operations.
+- `client/src/components/ThumbnailPicker.tsx`: thumbnail selection grid with skeleton loading and image-level load state.
+- `client/src/hooks/useSpriteProgress.ts`: sprite progress polling hook with job-settled callback.
 - `client/src/utils.ts`: formatting helpers.
 - `client/src/types.ts`: shared type definitions.
 - `client/src/index.css`: design tokens and global styles.

@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, KeyboardEvent } from "react";
+import { useState, useEffect, useCallback, type KeyboardEvent } from "react";
 import { Folder, File, Pencil, Trash2, FolderOpen } from "lucide-react";
 import { formatBytes, formatDate } from "./utils";
 import type { FileItem } from "./types";
+import { useToast } from "./components/ToastProvider";
 import "./FileManager.css";
 
 type ModalType = "rename" | "delete" | null;
@@ -13,6 +14,7 @@ function FileManager() {
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(null);
   const [modal, setModal] = useState<ModalType>(null);
   const [renameValue, setRenameValue] = useState("");
+  const { pushToast: pushToastRaw } = useToast();
 
   const fetchFiles = useCallback(async (path: string) => {
     setLoading(true);
@@ -21,7 +23,7 @@ function FileManager() {
       const res = await fetch(`/api/files?path=${encodeURIComponent(apiPath)}`);
       if (!res.ok) throw new Error("Failed to fetch");
       const data = await res.json();
-      setFiles(data);
+      setFiles(Array.isArray(data) ? data : []);
     } catch {
       setFiles([]);
     } finally {
@@ -32,8 +34,6 @@ function FileManager() {
   useEffect(() => {
     fetchFiles(currentPath);
   }, [currentPath, fetchFiles]);
-
-  const navigateTo = (path: string) => setCurrentPath(path);
 
   const breadcrumbParts = currentPath.split("/").filter(Boolean);
 
@@ -70,7 +70,7 @@ function FileManager() {
       closeModal();
       fetchFiles(currentPath);
     } catch {
-      alert("Failed to rename");
+      pushToastRaw({ variant: "error", message: "Failed to rename" });
     }
   };
 
@@ -84,7 +84,7 @@ function FileManager() {
       closeModal();
       fetchFiles(currentPath);
     } catch {
-      alert("Failed to delete");
+      pushToastRaw({ variant: "error", message: "Failed to delete" });
     }
   };
 
@@ -101,13 +101,13 @@ function FileManager() {
 
       <div className="fm-toolbar">
         <div className="fm-breadcrumb">
-          <button className="fm-crumb" onClick={() => navigateTo("")}>/</button>
+          <button className="fm-crumb" onClick={() => setCurrentPath("")}>/</button>
           {breadcrumbParts.map((part, i) => {
             const path = breadcrumbParts.slice(0, i + 1).join("/");
             return (
               <span key={path}>
                 <span className="fm-crumb-sep">/</span>
-                <button className="fm-crumb" onClick={() => navigateTo(path)}>{part}</button>
+                <button className="fm-crumb" onClick={() => setCurrentPath(path)}>{part}</button>
               </span>
             );
           })}
@@ -128,7 +128,7 @@ function FileManager() {
               <div
                 key={file.path}
                 className={`fm-item ${file.isFolder ? "folder" : ""}`}
-                onClick={() => file.isFolder && navigateTo(file.path)}
+                onClick={() => file.isFolder && setCurrentPath(file.path)}
               >
                 <div className="fm-name">
                   {file.isFolder ? (

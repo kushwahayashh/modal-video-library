@@ -1,215 +1,19 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, type MouseEvent as ReactMouseEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Link } from "react-router-dom";
-import { Search, Play, Download, Trash2, Edit3, Copy, Info, X, LayoutGrid, Check, Image } from "lucide-react";
+import { Search } from "lucide-react";
 // @ts-expect-error plyr types export both default and namespace which confuses bundler resolution
 import Plyr from "plyr";
 import "plyr/dist/plyr.css";
 import "./App.css";
-import { formatBytes, formatDate } from "./utils";
 import type { Video } from "./types";
-
-interface ContextMenuState {
-  visible: boolean;
-  x: number;
-  y: number;
-  video: Video | null;
-}
-
-type ActionModalType = "rename" | "delete" | "properties" | "thumbnail" | null;
-
-function getStablePlaceholder(videoId: string, placeholders: string[]): string | null {
-  if (placeholders.length === 0) return null;
-  let hash = 0;
-  for (let i = 0; i < videoId.length; i += 1) {
-    hash = (hash * 31 + videoId.charCodeAt(i)) >>> 0;
-  }
-  return placeholders[hash % placeholders.length] || null;
-}
-
-function saveThumbnailToServer(videoId: string, imageUrl: string) {
-  fetch("/api/thumbnail-map", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ videoId, imageUrl }),
-  }).catch(() => {});
-}
-
-interface VideoProperties extends Video {
-  modifiedAt?: string;
-  resolution?: string;
-  videoCodec?: string;
-  videoBitrate?: string;
-  framerate?: string;
-  pixelFormat?: string;
-  audioCodec?: string;
-  audioBitrate?: string;
-  audioChannels?: string;
-  sampleRate?: string;
-  container?: string;
-  totalBitrate?: string;
-}
-
-interface ContextMenuProps {
-  state: ContextMenuState;
-  onClose: () => void;
-  onAction: (action: string, video: Video) => void;
-}
-
-function ContextMenu({ state, onClose, onAction }: ContextMenuProps) {
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!state.visible) return;
-
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-
-    const handleScroll = () => onClose();
-    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("scroll", handleScroll, true);
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("scroll", handleScroll, true);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [state.visible, onClose]);
-
-  useEffect(() => {
-    if (!state.visible || !menuRef.current) return;
-
-    const menu = menuRef.current;
-    const rect = menu.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-
-    let adjustedX = state.x;
-    let adjustedY = state.y;
-
-    if (state.x + rect.width > viewportWidth - 8) {
-      adjustedX = viewportWidth - rect.width - 8;
-    }
-    if (state.y + rect.height > viewportHeight - 8) {
-      adjustedY = viewportHeight - rect.height - 8;
-    }
-
-    if (adjustedX !== state.x || adjustedY !== state.y) {
-      menu.style.left = `${adjustedX}px`;
-      menu.style.top = `${adjustedY}px`;
-    }
-  }, [state.visible, state.x, state.y]);
-
-  if (!state.visible || !state.video) return null;
-
-  const menuItems = [
-    { id: "play", label: "Play", icon: Play },
-    { id: "download", label: "Download", icon: Download },
-    { id: "copy-link", label: "Copy Link", icon: Copy },
-    { id: "rename", label: "Rename", icon: Edit3 },
-    { id: "info", label: "Properties", icon: Info },
-    { id: "sprites", label: state.video?.hasSprites ? "Regenerate Sprites" : "Generate Sprites", icon: LayoutGrid },
-    { id: "thumbnail", label: "Change Thumbnail", icon: Image },
-    { id: "delete", label: "Delete", icon: Trash2, danger: true },
-  ];
-
-  return (
-    <div
-      ref={menuRef}
-      className="context-menu"
-      style={{ left: state.x, top: state.y }}
-    >
-      {menuItems.map((item) => (
-          <button
-            key={item.id}
-            className={`context-menu-item ${item.danger ? "danger" : ""}`}
-            onClick={() => {
-              onAction(item.id, state.video!);
-              onClose();
-            }}
-          >
-            {item.icon && <item.icon size={16} />}
-            <span>{item.label}</span>
-          </button>
-      ))}
-    </div>
-  );
-}
-
-interface VideoCardProps {
-  video: Video;
-  onClick: () => void;
-  onContextMenu: (e: React.MouseEvent, video: Video) => void;
-  placeholderImages: string[];
-  thumbnailOverrides: Record<string, string>;
-}
-
-function VideoCard({ video, onClick, onContextMenu, placeholderImages, thumbnailOverrides }: VideoCardProps) {
-  const [isVisible, setIsVisible] = useState(false);
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const cardRef = useRef<HTMLDivElement>(null);
-  const prevSrcRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "100px" }
-    );
-
-    if (cardRef.current) {
-      observer.observe(cardRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, []);
-
-  const fallbackPlaceholder = getStablePlaceholder(video.id, placeholderImages);
-  const imgSrc = video.thumbnail || thumbnailOverrides[video.id] || fallbackPlaceholder;
-
-  if (imgSrc !== prevSrcRef.current) {
-    prevSrcRef.current = imgSrc;
-    if (imageLoaded) setImageLoaded(false);
-  }
-
-  const handleContextMenu = (e: React.MouseEvent) => {
-    e.preventDefault();
-    onContextMenu(e, video);
-  };
-
-  return (
-    <div ref={cardRef} className="video-card" onClick={onClick} onContextMenu={handleContextMenu}>
-      <div className="video-thumbnail">
-        <div className="video-placeholder skeleton"></div>
-        {isVisible && imgSrc && (
-          <img
-            src={imgSrc}
-            alt=""
-            loading="lazy"
-            className={`video-thumb-img ${imageLoaded ? "loaded" : ""}`}
-            onLoad={() => setImageLoaded(true)}
-          />
-        )}
-        {video.duration && <div className="video-duration">{video.duration}</div>}
-      </div>
-      <div className="video-info">
-        <h3 className="video-title">{video.title}</h3>
-        <p className="video-meta">{video.size || "Unknown size"}</p>
-      </div>
-    </div>
-  );
-}
+import { useSpriteProgress, type SpriteProgressJob } from "./hooks/useSpriteProgress";
+import { useToast } from "./components/ToastProvider";
+import ContextMenu from "./components/video-library/ContextMenu";
+import VideoCard from "./components/video-library/VideoCard";
+import VideoPlayerModal from "./components/video-library/VideoPlayerModal";
+import VideoActionModal from "./components/video-library/VideoActionModal";
+import { saveThumbnailToServer } from "./components/video-library/helpers";
+import type { ActionModalType, ContextMenuState, VideoProperties } from "./components/video-library/types";
 
 function App() {
   const [videos, setVideos] = useState<Video[]>([]);
@@ -218,6 +22,7 @@ function App() {
   const [modalVisible, setModalVisible] = useState(false);
   const [search, setSearch] = useState("");
   const [placeholderImages, setPlaceholderImages] = useState<string[]>([]);
+  const [placeholdersLoading, setPlaceholdersLoading] = useState(true);
   const [thumbnailOverrides, setThumbnailOverrides] = useState<Record<string, string>>({});
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
@@ -230,14 +35,7 @@ function App() {
   const [renameValue, setRenameValue] = useState("");
   const [videoProps, setVideoProps] = useState<VideoProperties | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const [spriteProgress, setSpriteProgress] = useState<{
-    videoId: string;
-    title: string;
-    status: string;
-    current: number;
-    total: number;
-    error: string | null;
-  } | null>(null);
+  const { pushToast: pushToastRaw, updateToast, removeToast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<Plyr | null>(null);
   const hasVideoDetails = !!(
@@ -259,6 +57,10 @@ function App() {
     saveThumbnailToServer(videoId, imageUrl);
   }, []);
 
+  const pushToast = useCallback((message: string, variant: "error" | "success" = "error") => {
+    pushToastRaw({ variant, message });
+  }, [pushToastRaw]);
+
   useEffect(() => {
     let active = true;
     Promise.all([
@@ -272,24 +74,30 @@ function App() {
       }
     }).catch(() => {
       if (active) setPlaceholderImages([]);
+    }).finally(() => {
+      if (active) setPlaceholdersLoading(false);
     });
-    return () => { active = false; };
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const fetchVideos = useCallback(() => {
     fetch("/api/videos")
-      .then((r) => r.json())
+      .then((r) => r.ok ? r.json() : { videos: [] })
       .then((data) => {
-        setVideos(data.videos || []);
-        setLoading(false);
+        setVideos(Array.isArray(data.videos) ? data.videos : []);
       })
       .catch(() => {
         setVideos([]);
+      })
+      .finally(() => {
         setLoading(false);
       });
   }, []);
 
-  const openContextMenu = (e: React.MouseEvent, video: Video) => {
+  const openContextMenu = (e: ReactMouseEvent, video: Video) => {
     setContextMenu({
       visible: true,
       x: e.clientX,
@@ -324,7 +132,7 @@ function App() {
     setActionLoading(false);
   };
 
-  const confirmRename = async () => {
+  const confirmRename = useCallback(async () => {
     if (!renameValue.trim() || !actionVideo) return;
     setActionLoading(true);
     try {
@@ -340,13 +148,13 @@ function App() {
       closeActionModal();
       fetchVideos();
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to rename");
+      pushToast(e instanceof Error ? e.message : "Failed to rename");
     } finally {
       setActionLoading(false);
     }
-  };
+  }, [renameValue, actionVideo, pushToast, fetchVideos]);
 
-  const confirmDelete = async () => {
+  const confirmDelete = useCallback(async () => {
     if (!actionVideo) return;
     setActionLoading(true);
     try {
@@ -357,59 +165,90 @@ function App() {
       closeActionModal();
       fetchVideos();
     } catch {
-      alert("Failed to delete video");
+      pushToast("Failed to delete video");
     } finally {
       setActionLoading(false);
     }
-  };
+  }, [actionVideo, pushToast, fetchVideos]);
 
-  const handleRenameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleRenameKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") confirmRename();
     if (e.key === "Escape") closeActionModal();
   };
 
-  const generateSprites = async (video: Video) => {
+  const generateSprites = useCallback(async (video: Video) => {
     try {
       const res = await fetch(`/api/videos/${video.id}/sprites`, { method: "POST" });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || "Failed to generate sprites");
       }
+      pushToast(`Sprite generation started: ${video.title}`, "success");
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to generate sprites");
+      pushToast(e instanceof Error ? e.message : "Failed to generate sprites");
     }
-  };
+  }, [pushToast]);
+
+  const handleSpriteJobSettled = useCallback((job: SpriteProgressJob) => {
+    if (job.status === "error") {
+      pushToast(job.error || "Sprite generation failed");
+    } else if (job.status === "done") {
+      pushToast(`Sprites ready: ${job.title}`, "success");
+    }
+    fetchVideos();
+  }, [fetchVideos, pushToast]);
+
+  const activeSpriteJobs = useSpriteProgress(handleSpriteJobSettled);
+  const spriteToastIds = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
-    const pollProgress = async () => {
-      try {
-        const res = await fetch("/api/sprites/progress");
-        if (!res.ok) return;
-        const data = await res.json();
-        const active = data.jobs.find(
-          (j: { status: string }) => j.status === "extracting" || j.status === "tiling"
-        );
-        if (active) {
-          setSpriteProgress(active);
-        } else {
-          if (spriteProgress) {
-            const finished = data.jobs.find(
-              (j: { status: string }) => j.status === "done" || j.status === "error"
-            );
-            if (finished?.status === "error") {
-              alert(finished.error || "Sprite generation failed");
-            }
-            fetchVideos();
-          }
-          setSpriteProgress(null);
-        }
-      } catch {}
-    };
+    const currentVideoIds = new Set(activeSpriteJobs.map((j) => j.videoId));
 
-    pollProgress();
-    const interval = setInterval(pollProgress, 1000);
-    return () => clearInterval(interval);
-  }, [spriteProgress, fetchVideos]);
+    for (const [videoId, toastId] of spriteToastIds.current) {
+      if (!currentVideoIds.has(videoId)) {
+        spriteToastIds.current.delete(videoId);
+        removeToast(toastId);
+      }
+    }
+
+    for (const job of activeSpriteJobs) {
+      const detail = job.status === "extracting"
+        ? `Extracting frames: ${job.current}/${job.total}`
+        : "Tiling sprite sheet...";
+      const progress = job.status === "extracting" && job.total > 0
+        ? Math.round((job.current / job.total) * 100)
+        : null;
+
+      const existingId = spriteToastIds.current.get(job.videoId);
+      if (existingId != null) {
+        updateToast(existingId, { detail, progress });
+      } else {
+        const id = pushToastRaw({
+          variant: "status",
+          title: job.title,
+          detail,
+          progress,
+        });
+        spriteToastIds.current.set(job.videoId, id);
+      }
+    }
+  }, [activeSpriteJobs, pushToastRaw, updateToast, removeToast]);
+
+  const openModal = (video: Video) => {
+    setSelectedVideo(video);
+    setTimeout(() => setModalVisible(true), 10);
+  };
+
+  const closeModal = useCallback(() => {
+    setModalVisible(false);
+    setTimeout(() => {
+      if (playerRef.current) {
+        playerRef.current.destroy();
+        playerRef.current = null;
+      }
+      setSelectedVideo(null);
+    }, 300);
+  }, []);
 
   const handleContextAction = (action: string, video: Video) => {
     switch (action) {
@@ -420,7 +259,9 @@ function App() {
         window.open(`/api/stream/${video.id}?download=1`, "_blank");
         break;
       case "copy-link":
-        navigator.clipboard.writeText(`${window.location.origin}/api/stream/${video.id}`);
+        navigator.clipboard.writeText(`${window.location.origin}/api/stream/${video.id}`)
+          .then(() => pushToast("Video link copied", "success"))
+          .catch(() => pushToast("Failed to copy video link"));
         break;
       case "rename":
         openActionModal("rename", video);
@@ -441,23 +282,12 @@ function App() {
     }
   };
 
-  const openModal = (video: Video) => {
-    setSelectedVideo(video);
-    setTimeout(() => setModalVisible(true), 10);
-  };
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredVideos = useMemo(
+    () => videos.filter((v) => v.title.toLowerCase().includes(normalizedSearch)),
+    [videos, normalizedSearch]
+  );
 
-  const closeModal = useCallback(() => {
-    setModalVisible(false);
-    setTimeout(() => {
-      if (playerRef.current) {
-        playerRef.current.destroy();
-        playerRef.current = null;
-      }
-      setSelectedVideo(null);
-    }, 300);
-  }, []);
-
-  // ESC key to close modal
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape" && selectedVideo) {
@@ -473,9 +303,9 @@ function App() {
       if (selectedVideo.hasSprites) {
         const existingTrack = videoRef.current.querySelector('track[kind="metadata"]');
         if (!existingTrack) {
-          const track = document.createElement('track');
-          track.kind = 'metadata';
-          track.label = 'thumbnails';
+          const track = document.createElement("track");
+          track.kind = "metadata";
+          track.label = "thumbnails";
           track.src = `/api/sprites/${selectedVideo.id}/vtt`;
           track.default = true;
           videoRef.current.appendChild(track);
@@ -483,7 +313,7 @@ function App() {
       }
 
       playerRef.current = new Plyr(videoRef.current, {
-        controls: ['play-large', 'play', 'progress', 'current-time', 'mute', 'volume', 'fullscreen'],
+        controls: ["play-large", "play", "progress", "current-time", "mute", "volume", "fullscreen"],
         keyboard: { focused: true, global: true },
         previewThumbnails: selectedVideo.hasSprites ? {
           enabled: true,
@@ -501,9 +331,9 @@ function App() {
     <div className="app">
       <nav className="nav">
         <div className="container nav-content">
-          <div className="nav-logo">
+          <a className="nav-logo" href="https://your-app.modal.run/">
             VIDEO<span>LIB</span>
-          </div>
+          </a>
 
           <div className="nav-search-wrapper">
             <Search size={18} className="nav-search-icon" />
@@ -539,9 +369,7 @@ function App() {
             </div>
           ) : (
             <div className="video-grid">
-              {videos
-                .filter((v) => v.title.toLowerCase().includes(search.toLowerCase()))
-                .map((video) => (
+              {filteredVideos.map((video) => (
                 <VideoCard
                   key={video.id}
                   video={video}
@@ -558,256 +386,35 @@ function App() {
 
       <ContextMenu state={contextMenu} onClose={closeContextMenu} onAction={handleContextAction} />
 
-      {spriteProgress && (
-        <div className="sprite-toast">
-          <div className="sprite-toast-title">{spriteProgress.title}</div>
-          <div className="sprite-toast-detail">
-            {spriteProgress.status === "extracting"
-              ? `Extracting frames: ${spriteProgress.current}/${spriteProgress.total}`
-              : "Tiling sprite sheet..."}
-          </div>
-          {spriteProgress.status === "extracting" && spriteProgress.total > 0 && (
-            <div className="sprite-toast-bar">
-              <div
-                className="sprite-toast-bar-fill"
-                style={{ width: `${Math.round((spriteProgress.current / spriteProgress.total) * 100)}%` }}
-              />
-            </div>
-          )}
-        </div>
-      )}
+      <VideoPlayerModal
+        selectedVideo={selectedVideo}
+        modalVisible={modalVisible}
+        videoRef={videoRef}
+        onClose={closeModal}
+      />
 
-      {selectedVideo && (
-        <div className={`modal-overlay ${modalVisible ? 'visible' : ''}`} onClick={closeModal}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <span>{selectedVideo.title}</span>
-              {selectedVideo.hasSprites && (
-                <span className="sprite-badge">
-                  <Check size={14} />
-                  Sprite Available
-                </span>
-              )}
-            </div>
-            <div className="modal-player">
-              <video ref={videoRef} playsInline>
-                <source src={`/api/stream/${selectedVideo.id}`} type="video/mp4" />
-              </video>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {actionModal && actionVideo && (
-        <div className="action-modal-overlay" onClick={closeActionModal}>
-          <div className={`action-modal ${actionModal === "thumbnail" ? "thumbnail-modal" : actionModal === "properties" ? "properties-modal" : ""}`} onClick={(e) => e.stopPropagation()}>
-            <button className="action-modal-close" onClick={closeActionModal}>
-              <X size={20} />
-            </button>
-
-            {actionModal === "rename" && (
-              <>
-                <div className="action-modal-title">Rename Video</div>
-                <input
-                  className="action-modal-input"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onKeyDown={handleRenameKeyDown}
-                  autoFocus
-                  placeholder="Enter new name"
-                />
-                <div className="action-modal-actions">
-                  <button className="action-btn secondary" onClick={closeActionModal}>Cancel</button>
-                  <button className="action-btn primary" onClick={confirmRename} disabled={actionLoading}>
-                    {actionLoading ? "Renaming..." : "Rename"}
-                  </button>
-                </div>
-              </>
-            )}
-
-            {actionModal === "delete" && (
-              <>
-                <div className="action-modal-title">Delete Video</div>
-                <div className="action-modal-message">
-                  Are you sure you want to delete <strong>"{actionVideo.title}"</strong>?
-                  <br />
-                  <span className="text-muted">This action cannot be undone.</span>
-                </div>
-                <div className="action-modal-actions">
-                  <button className="action-btn secondary" onClick={closeActionModal}>Cancel</button>
-                  <button className="action-btn danger" onClick={confirmDelete} disabled={actionLoading}>
-                    {actionLoading ? "Deleting..." : "Delete"}
-                  </button>
-                </div>
-              </>
-            )}
-
-            {actionModal === "properties" && (
-              <>
-                <div className="prop-header">
-                  <div className="prop-label">Properties</div>
-                  <div className="prop-title">{actionVideo.title}</div>
-                  <div className="prop-filename">{actionVideo.filename}</div>
-                </div>
-                <div className="prop-body">
-                  {!videoProps ? (
-                    <div className="prop-skeleton">
-                      <div className="prop-summary-skel">
-                        <div className="prop-skel-block" />
-                        <div className="prop-skel-block" />
-                        <div className="prop-skel-block" />
-                        <div className="prop-skel-block" />
-                      </div>
-                      <div className="prop-section-skel-grid">
-                        <div className="prop-section-skel" />
-                        <div className="prop-section-skel" />
-                      </div>
-                      <div className="prop-meta-skel" />
-                    </div>
-                  ) : (
-                    <div className="prop-content">
-                      <div className="prop-summary">
-                        <div className="prop-summary-item">
-                          <span className="prop-summary-label">Size</span>
-                          <span className="prop-summary-value">
-                            {videoProps.sizeBytes ? formatBytes(videoProps.sizeBytes) : actionVideo.size || "—"}
-                          </span>
-                        </div>
-                        <div className="prop-summary-item">
-                          <span className="prop-summary-label">Duration</span>
-                          <span className="prop-summary-value">{videoProps.duration || actionVideo.duration || "—"}</span>
-                        </div>
-                        <div className="prop-summary-item">
-                          <span className="prop-summary-label">Container</span>
-                          <span className="prop-summary-value">{videoProps.container || "—"}</span>
-                        </div>
-                        <div className="prop-summary-item">
-                          <span className="prop-summary-label">Bitrate</span>
-                          <span className="prop-summary-value">{videoProps.totalBitrate || "—"}</span>
-                        </div>
-                      </div>
-
-                      {(hasVideoDetails || hasAudioDetails) ? (
-                        <div className="prop-sections">
-                          {hasVideoDetails && (
-                            <div className="prop-section">
-                              <div className="prop-section-title">Video</div>
-                              <div className="prop-kv">
-                                {videoProps.resolution && (
-                                  <div className="prop-kv-row">
-                                    <span className="prop-kv-label">Resolution</span>
-                                    <span className="prop-kv-value">{videoProps.resolution}</span>
-                                  </div>
-                                )}
-                                {videoProps.videoCodec && (
-                                  <div className="prop-kv-row">
-                                    <span className="prop-kv-label">Codec</span>
-                                    <span className="prop-pill">{videoProps.videoCodec.toUpperCase()}</span>
-                                  </div>
-                                )}
-                                {videoProps.framerate && (
-                                  <div className="prop-kv-row">
-                                    <span className="prop-kv-label">Framerate</span>
-                                    <span className="prop-kv-value">{videoProps.framerate}</span>
-                                  </div>
-                                )}
-                                {videoProps.videoBitrate && (
-                                  <div className="prop-kv-row">
-                                    <span className="prop-kv-label">Video bitrate</span>
-                                    <span className="prop-kv-value">{videoProps.videoBitrate}</span>
-                                  </div>
-                                )}
-                                {videoProps.pixelFormat && (
-                                  <div className="prop-kv-row">
-                                    <span className="prop-kv-label">Pixel format</span>
-                                    <span className="prop-kv-value">{videoProps.pixelFormat}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                          {hasAudioDetails && (
-                            <div className="prop-section">
-                              <div className="prop-section-title">Audio</div>
-                              <div className="prop-kv">
-                                {videoProps.audioCodec && (
-                                  <div className="prop-kv-row">
-                                    <span className="prop-kv-label">Codec</span>
-                                    <span className="prop-pill">{videoProps.audioCodec.toUpperCase()}</span>
-                                  </div>
-                                )}
-                                {videoProps.audioChannels && (
-                                  <div className="prop-kv-row">
-                                    <span className="prop-kv-label">Channels</span>
-                                    <span className="prop-kv-value">{videoProps.audioChannels}</span>
-                                  </div>
-                                )}
-                                {videoProps.sampleRate && (
-                                  <div className="prop-kv-row">
-                                    <span className="prop-kv-label">Sample rate</span>
-                                    <span className="prop-kv-value">{videoProps.sampleRate}</span>
-                                  </div>
-                                )}
-                                {videoProps.audioBitrate && (
-                                  <div className="prop-kv-row">
-                                    <span className="prop-kv-label">Audio bitrate</span>
-                                    <span className="prop-kv-value">{videoProps.audioBitrate}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="prop-empty">No stream details available.</div>
-                      )}
-
-                      <div className="prop-meta">
-                        <div className="prop-meta-row">
-                          <span className="prop-meta-label">Created</span>
-                          <span className="prop-meta-value">{formatDate(videoProps.createdAt || actionVideo.createdAt)}</span>
-                        </div>
-                        {videoProps.modifiedAt && (
-                          <div className="prop-meta-row">
-                            <span className="prop-meta-label">Modified</span>
-                            <span className="prop-meta-value">{formatDate(videoProps.modifiedAt)}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="action-modal-actions">
-                  <button className="action-btn primary" onClick={closeActionModal}>Close</button>
-                </div>
-              </>
-            )}
-
-            {actionModal === "thumbnail" && (
-              <>
-                <div className="action-modal-title">Change Thumbnail</div>
-                <div className="thumbnail-picker-grid">
-                  {placeholderImages.map((img) => (
-                    <button
-                      key={img}
-                      className={`thumbnail-picker-item ${thumbnailOverrides[actionVideo!.id] === img ? "active" : ""}`}
-                      onClick={() => {
-                        updateThumbnailOverride(actionVideo!.id, img);
-                        closeActionModal();
-                      }}
-                    >
-                      <img src={img} alt="" />
-                    </button>
-                  ))}
-                </div>
-                <div className="action-modal-actions">
-                  <button className="action-btn secondary" onClick={closeActionModal}>Cancel</button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      <VideoActionModal
+        actionModal={actionModal}
+        actionVideo={actionVideo}
+        actionLoading={actionLoading}
+        renameValue={renameValue}
+        onRenameValueChange={setRenameValue}
+        onClose={closeActionModal}
+        onRenameKeyDown={handleRenameKeyDown}
+        onConfirmRename={confirmRename}
+        onConfirmDelete={confirmDelete}
+        videoProps={videoProps}
+        hasVideoDetails={hasVideoDetails}
+        hasAudioDetails={hasAudioDetails}
+        placeholderImages={placeholderImages}
+        placeholdersLoading={placeholdersLoading}
+        selectedThumbnail={actionVideo ? thumbnailOverrides[actionVideo.id] : undefined}
+        onThumbnailSelect={(image) => {
+          if (!actionVideo) return;
+          updateThumbnailOverride(actionVideo.id, image);
+          closeActionModal();
+        }}
+      />
     </div>
   );
 }

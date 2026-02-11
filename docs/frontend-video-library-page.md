@@ -10,6 +10,7 @@
 ## Internal Components
 - `ContextMenu`: right-click action menu with viewport clamping and outside-click close behavior.
 - `VideoCard`: lazy thumbnail loading with intersection observer and stable placeholder fallback.
+- `ThumbnailPicker`: extracted thumbnail chooser used by the thumbnail action modal, including skeleton states and per-image fade-in.
 
 ## Local State Summary
 - Data and loading: `videos`, `loading`.
@@ -19,7 +20,7 @@
 - Action modals: `actionModal`, `actionVideo`, `renameValue`, `actionLoading`.
 - Properties: `videoProps`.
 - Sprite status: `spriteProgress`.
-- Thumbnail sources: `placeholderImages`, `thumbnailOverrides`.
+- Thumbnail sources: `placeholderImages`, `thumbnailOverrides`, `placeholdersLoading`.
 
 ## Data Fetching
 - On mount:
@@ -38,10 +39,22 @@
 - `Change Thumbnail`: save selection to `/api/thumbnail-map`.
 
 ## Sprite Integration
-- Polls `/api/sprites/progress` every second.
-- Displays active extraction/tiling status.
-- Refreshes video list after completion.
+- Uses `useSpriteProgress` hook to poll `/api/sprites/progress` every second.
+- Displays extraction/tiling status for all active jobs (not just one).
+- Refreshes video list after each job settlement.
 - On playback, enables Plyr preview thumbnails if `hasSprites` is true.
+
+## Thumbnail Picker Behavior
+- Thumbnail action modal renders `ThumbnailPicker` with three states:
+  - Global loading skeleton tiles while placeholder list is loading.
+  - Empty state when no placeholder images are available.
+  - Interactive image grid with per-image skeleton until each image load completes.
+- Selected thumbnail is persisted through `POST /api/thumbnail-map`.
+
+## User Feedback
+- Replaces blocking `alert` calls with in-app toast notifications.
+- Uses success toasts for copy-link and sprite start/complete events.
+- Uses error toasts for failed operations.
 
 ## Player Lifecycle
 - Plyr is created once when modal opens and ref exists.

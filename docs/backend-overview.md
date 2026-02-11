@@ -12,12 +12,16 @@
 3. Initializes `DATA_DIR` subfolders if possible.
 4. Exposes placeholder images from `images/` under `/api/placeholder-images/`.
 5. Registers HTTP and WebSocket routes.
-6. Starts listener on `0.0.0.0:3000`.
+6. Starts listener on `0.0.0.0:${PORT}` where `PORT` defaults to `3000`.
+
+## Startup/Testability Controls
+- `NO_AUTO_LISTEN=1` prevents automatic `app.listen(...)` so route contracts can be tested via `app.inject`.
+- `app` is exported from `server/src/index.js` for contract test usage.
 
 ## Core Helpers
 - `toBase64Url()` and `fromBase64Url()`: map filenames to URL-safe IDs.
 - `fileExists()`: async path existence check.
-- `getVideoDuration()`: ffprobe duration extraction with cache keyed by path + mtime.
+- `getVideoDuration()`: ffprobe duration extraction with path+mtime cache and bounded LRU-style eviction.
 - `getVideoMetadata()`: ffprobe stream/format metadata extraction.
 - `formatBytes()`, `formatBitrate()`, `formatChannels()`: backend formatting helpers.
 - `isPathSafe()`: path traversal guard for file-manager operations.
@@ -39,6 +43,7 @@
 - Stream route supports:
   - Download mode with `Content-Disposition`.
   - HTTP byte-range partial content for playback.
+- Video rename/delete routes also maintain sprite assets and thumbnail-map consistency.
 - File manager allows recursive delete via `fsp.rm(..., { recursive: true })` on validated paths.
 
 ## Terminal WebSocket Backend

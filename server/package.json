@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "start": "bun src/index.js",
-    "dev": "bun --watch src/index.js"
+    "dev": "bun --watch src/index.js",
+    "test": "node --test tests/**/*.test.js"
   },
   "dependencies": {
     "fastify": "^5.0.0",

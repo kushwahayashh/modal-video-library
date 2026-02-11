@@ -1,0 +1,147 @@
+.toast-vp {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 3200;
+  width: min(360px, calc(100vw - 40px));
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+.toast-vp.empty { visibility: hidden }
+.toast-vp > * { pointer-events: auto }
+
+/* latest toast wrapper */
+.toast-anchor { position: relative }
+
+/* count badge — always in DOM, never shifts layout */
+.toast-badge {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 0.6875rem;
+  line-height: 1;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-50%) scale(0.85);
+  transition: opacity 0.2s, transform 0.2s;
+}
+.toast-badge.show {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+/* history panel — slides open above anchor */
+.toast-history {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  padding-bottom: 0;
+  transition: max-height 0.3s cubic-bezier(0.4,0,0.2,1),
+              opacity 0.25s,
+              padding-bottom 0.3s;
+}
+.toast-history.open {
+  max-height: 50vh;
+  padding-bottom: 6px;
+  opacity: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.toast-history::-webkit-scrollbar { width: 4px }
+.toast-history::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px }
+
+/* staggered items inside history */
+.toast-hist-item {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.2s, transform 0.2s;
+}
+.toast-history.open .toast-hist-item {
+  opacity: 1;
+  transform: none;
+}
+
+/* card */
+.toast-card {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: opacity 0.3s cubic-bezier(0.4,0,0.2,1),
+              transform 0.3s cubic-bezier(0.4,0,0.2,1);
+  will-change: opacity, transform;
+}
+.toast-card[data-phase="enter"] {
+  opacity: 0;
+  transform: translateY(8px) scale(0.96);
+}
+.toast-card[data-phase="open"] {
+  opacity: 1;
+  transform: none;
+}
+.toast-card[data-phase="exit"] {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.97);
+  pointer-events: none;
+}
+
+/* variants */
+.toast-card.error   { border-color: var(--danger) }
+.toast-card.success { border-color: var(--text-secondary) }
+.toast-card.status  { border-color: var(--text-muted); background: var(--bg-card) }
+
+/* card content */
+.toast-title {
+  font-weight: 600;
+  font-size: 0.8125rem;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.toast-msg  { overflow-wrap: anywhere }
+.toast-detail {
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+/* progress */
+.toast-bar {
+  margin-top: 4px;
+  height: 4px;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.toast-bar-fill {
+  width: 100%;
+  height: 100%;
+  background: var(--text-primary);
+  border-radius: inherit;
+  transform-origin: left center;
+  transition: transform 0.5s cubic-bezier(0.4,0,0.2,1);
+  will-change: transform;
+}
+
+@media (max-width: 640px) {
+  .toast-vp { right: 12px; bottom: 12px; width: calc(100vw - 24px) }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast-card, .toast-bar-fill, .toast-badge, .toast-history, .toast-hist-item { transition: none }
+}

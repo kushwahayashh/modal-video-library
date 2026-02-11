@@ -28,4 +28,4 @@
 
 ## Failure Handling
 - Fetch failures clear list to empty.
-- Rename/delete failures display `alert`.
+- Rename/delete failures display in-page toast messages.

@@ -6,18 +6,22 @@ import path from "path";
 import fs from "fs";
 import { promises as fsp } from "fs";
 import { fileURLToPath } from "url";
-import { execFile } from "child_process";
-import os from "os";
-import { promisify } from "util";
-
-const execFileAsync = promisify(execFile);
+import { createThumbMapStore } from "./lib/thumb-map.js";
+import { createSpriteService } from "./lib/sprite-generation.js";
+import { fileExists, isPathSafe, formatBytes } from "./lib/files.js";
+import {
+  VIDEO_EXTENSIONS,
+  VIDEO_MIME_TYPES,
+  toBase64Url,
+  fromBase64Url,
+  getVideoDuration,
+  getVideoMetadata,
+} from "./lib/video-utils.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 const app = Fastify({ logger: false, routerOptions: { maxParamLength: 500 } });
 
 await app.register(cors, { origin: true });
-
 await app.register(websocket);
 
 const clientBuildPath = path.join(__dirname, "../../client/dist");
@@ -26,29 +30,21 @@ try {
     root: clientBuildPath,
     prefix: "/",
   });
-} catch (e) {
+} catch {
   // Client not built yet, that's fine for dev
-}
-
-function toBase64Url(str) {
-  return Buffer.from(str).toString("base64url");
-}
-function fromBase64Url(b64) {
-  return Buffer.from(b64, "base64url").toString("utf-8");
 }
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
 const VIDEOS_DIR = path.join(DATA_DIR, "videos");
-const THUMBNAILS_DIR = path.join(DATA_DIR, "thumbnails");
 const SPRITES_DIR = path.join(DATA_DIR, "sprites");
 const PLACEHOLDERS_DIR = path.join(__dirname, "../../images");
 const PLACEHOLDER_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
 
-[VIDEOS_DIR, THUMBNAILS_DIR, SPRITES_DIR].forEach((dir) => {
+[VIDEOS_DIR, SPRITES_DIR].forEach((dir) => {
   if (!fs.existsSync(dir)) {
     try {
       fs.mkdirSync(dir, { recursive: true });
-    } catch (e) {
+    } catch {
       // Ignore if can't create (might not have /data locally)
     }
   }
@@ -60,75 +56,17 @@ try {
     prefix: "/api/placeholder-images/",
     decorateReply: false,
   });
-} catch (e) {
+} catch {
   // Images folder might be missing; ignore
 }
 
+const { readThumbMap, writeThumbMap } = createThumbMapStore(DATA_DIR);
+const { spriteJobs, runSpriteGeneration, isJobRunning } = createSpriteService({
+  spritesDir: SPRITES_DIR,
+  fileExists,
+});
+
 let cloudflareUrl = null;
-
-const durationCache = new Map();
-
-async function fileExists(p) {
-  try {
-    await fsp.access(p);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function getVideoDuration(filePath) {
-  try {
-    const stats = await fsp.stat(filePath);
-    const cacheKey = `${filePath}:${stats.mtimeMs}`;
-    if (durationCache.has(cacheKey)) {
-      return durationCache.get(cacheKey);
-    }
-
-    const { stdout } = await execFileAsync("ffprobe", [
-      "-v", "error",
-      "-show_entries", "format=duration",
-      "-of", "default=noprint_wrappers=1:nokey=1",
-      filePath,
-    ], { timeout: 10000 });
-
-    const seconds = parseFloat(stdout.trim());
-    if (isNaN(seconds)) {
-      durationCache.set(cacheKey, null);
-      return null;
-    }
-
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-
-    let duration;
-    if (hrs > 0) {
-      duration = `${hrs}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-    } else {
-      duration = `${mins}:${secs.toString().padStart(2, "0")}`;
-    }
-
-    durationCache.set(cacheKey, duration);
-    return duration;
-  } catch (e) {
-    return null;
-  }
-}
-
-function isPathSafe(targetPath) {
-  const resolvedData = path.resolve(DATA_DIR);
-  const resolved = path.resolve(DATA_DIR, targetPath);
-  return resolved === resolvedData || resolved.startsWith(resolvedData + path.sep);
-}
-
-function formatBytes(bytes) {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-}
 
 app.get("/api/health", async () => {
   return { status: "ok", timestamp: new Date().toISOString(), cloudflareUrl };
@@ -142,35 +80,27 @@ app.get("/api/placeholder-images", async () => {
       .map((entry) => `/api/placeholder-images/${encodeURIComponent(entry.name)}`)
       .sort();
     return { images };
-  } catch (e) {
+  } catch {
     return { images: [] };
   }
 });
 
-const THUMB_MAP_PATH = path.join(DATA_DIR, "thumbnail-map.json");
+app.get("/api/thumbnail-map", async () => readThumbMap());
 
-async function readThumbMap() {
-  try {
-    const raw = await fsp.readFile(THUMB_MAP_PATH, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return {};
-  }
-}
-
-async function writeThumbMap(map) {
-  await fsp.writeFile(THUMB_MAP_PATH, JSON.stringify(map));
-}
-
-app.get("/api/thumbnail-map", async () => {
-  return await readThumbMap();
-});
-
-app.post("/api/thumbnail-map", async (request) => {
+app.post("/api/thumbnail-map", async (request, reply) => {
   const { videoId, imageUrl } = request.body || {};
-  if (!videoId || !imageUrl) return { error: "videoId and imageUrl required" };
+
+  if (
+    typeof videoId !== "string" ||
+    typeof imageUrl !== "string" ||
+    !videoId.trim() ||
+    !imageUrl.trim()
+  ) {
+    return reply.status(400).send({ error: "videoId and imageUrl required" });
+  }
+
   const map = await readThumbMap();
-  map[videoId] = imageUrl;
+  map[videoId.trim()] = imageUrl.trim();
   await writeThumbMap(map);
   return { success: true };
 });
@@ -196,7 +126,7 @@ app.get("/api/cf-url", async (request, reply) => {
   return { url: cloudflareUrl };
 });
 
-app.get("/cf", async (request, reply) => {
+app.get("/cf", async (_request, reply) => {
   if (!cloudflareUrl) {
     return reply.status(404).send({ error: "Cloudflare URL not set. Tunnel not running?" });
   }
@@ -204,31 +134,21 @@ app.get("/cf", async (request, reply) => {
 });
 
 app.get("/api/videos", async () => {
-  const videos = [];
-
   try {
-    if (await fileExists(VIDEOS_DIR)) {
-      const files = await fsp.readdir(VIDEOS_DIR);
-      const videoExtensions = [".mp4", ".mkv", ".avi", ".webm", ".mov"];
+    if (!(await fileExists(VIDEOS_DIR))) return { videos: [], total: 0 };
 
-      const entries = [];
-      for (const file of files) {
+    const files = await fsp.readdir(VIDEOS_DIR);
+    const videos = (await Promise.all(files.map(async (file) => {
+      try {
         const ext = path.extname(file).toLowerCase();
-        if (videoExtensions.includes(ext)) {
-          const filePath = path.join(VIDEOS_DIR, file);
-          const stats = await fsp.stat(filePath);
-          entries.push({ file, ext, filePath, stats });
-        }
-      }
-
-      const durations = await Promise.all(
-        entries.map((e) => getVideoDuration(e.filePath))
-      );
-
-      for (let i = 0; i < entries.length; i++) {
-        const { file, ext, stats } = entries[i];
+        if (!VIDEO_EXTENSIONS.has(ext)) return null;
+        const filePath = path.join(VIDEOS_DIR, file);
+        const [stats, duration] = await Promise.all([
+          fsp.stat(filePath),
+          getVideoDuration(filePath),
+        ]);
         const videoId = toBase64Url(file);
-        videos.push({
+        return {
           id: videoId,
           title: path.basename(file, ext),
           filename: file,
@@ -236,84 +156,21 @@ app.get("/api/videos", async () => {
           sizeBytes: stats.size,
           createdAt: stats.birthtime,
           thumbnail: null,
-          duration: durations[i],
+          duration,
           hasSprites: fs.existsSync(path.join(SPRITES_DIR, videoId, "sprite.jpg")),
-        });
+        };
+      } catch {
+        return null;
       }
-    }
+    }))).filter(Boolean);
+
+    videos.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    return { videos, total: videos.length };
   } catch (e) {
     console.error("Error reading videos:", e);
+    return { videos: [], total: 0 };
   }
-
-  videos.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-  return { videos, total: videos.length };
 });
-
-function formatBitrate(bps) {
-  const n = parseFloat(bps);
-  if (isNaN(n)) return null;
-  if (n >= 1000000) {
-    const val = (n / 1000000).toFixed(1);
-    return val.endsWith(".0") ? val.slice(0, -2) + " Mbps" : val + " Mbps";
-  }
-  if (n >= 1000) return Math.round(n / 1000) + " Kbps";
-  return n + " bps";
-}
-
-function formatChannels(ch) {
-  const n = parseInt(ch, 10);
-  if (n === 1) return "Mono";
-  if (n === 2) return "Stereo";
-  if (n === 6) return "5.1";
-  if (n === 8) return "7.1";
-  return String(n);
-}
-
-async function getVideoMetadata(filePath) {
-  try {
-    const { stdout } = await execFileAsync("ffprobe", [
-      "-v", "error",
-      "-show_format",
-      "-show_streams",
-      "-of", "json",
-      filePath,
-    ]);
-    const probe = JSON.parse(stdout);
-    const streams = probe.streams || [];
-    const format = probe.format || {};
-    const videoStream = streams.find((s) => s.codec_type === "video");
-    const audioStream = streams.find((s) => s.codec_type === "audio");
-
-    const meta = {};
-
-    if (videoStream) {
-      meta.resolution = `${videoStream.width}x${videoStream.height}`;
-      meta.videoCodec = videoStream.codec_name;
-      const vBitrate = videoStream.bit_rate || format.bit_rate;
-      meta.videoBitrate = vBitrate ? formatBitrate(vBitrate) : null;
-      if (videoStream.r_frame_rate) {
-        const [num, den] = videoStream.r_frame_rate.split("/").map(Number);
-        meta.framerate = den ? (num / den).toFixed(2).replace(/\.?0+$/, "") + " fps" : null;
-      }
-      meta.pixelFormat = videoStream.pix_fmt;
-    }
-
-    if (audioStream) {
-      meta.audioCodec = audioStream.codec_name;
-      meta.audioBitrate = audioStream.bit_rate ? formatBitrate(audioStream.bit_rate) : null;
-      meta.audioChannels = audioStream.channels != null ? formatChannels(audioStream.channels) : null;
-      meta.sampleRate = audioStream.sample_rate ? audioStream.sample_rate + " Hz" : null;
-    }
-
-    meta.container = format.format_long_name || null;
-    meta.totalBitrate = format.bit_rate ? formatBitrate(format.bit_rate) : null;
-
-    return meta;
-  } catch {
-    return {};
-  }
-}
 
 app.get("/api/videos/:id", async (request, reply) => {
   const { id } = request.params;
@@ -379,6 +236,9 @@ app.post("/api/videos/:id/rename", async (request, reply) => {
     const oldSpriteDir = path.join(SPRITES_DIR, id);
     const newSpriteDir = path.join(SPRITES_DIR, newId);
     if (await fileExists(oldSpriteDir)) {
+      if (newSpriteDir !== oldSpriteDir && (await fileExists(newSpriteDir))) {
+        await fsp.rm(newSpriteDir, { recursive: true, force: true });
+      }
       await fsp.rename(oldSpriteDir, newSpriteDir);
       const vttPath = path.join(newSpriteDir, "sprite.vtt");
       if (await fileExists(vttPath)) {
@@ -394,6 +254,15 @@ app.post("/api/videos/:id/rename", async (request, reply) => {
         } catch (e) {
           console.warn("Failed to update sprite VTT after rename:", e);
         }
+      }
+    }
+
+    if (newId !== id) {
+      const thumbMap = await readThumbMap();
+      if (thumbMap[id]) {
+        thumbMap[newId] = thumbMap[id];
+        delete thumbMap[id];
+        await writeThumbMap(thumbMap);
       }
     }
 
@@ -415,184 +284,26 @@ app.delete("/api/videos/:id", async (request, reply) => {
 
   try {
     await fsp.unlink(filePath);
+
+    const spriteDir = path.join(SPRITES_DIR, id);
+    if (await fileExists(spriteDir)) {
+      await fsp.rm(spriteDir, { recursive: true, force: true });
+    }
+
+    const thumbMap = await readThumbMap();
+    if (thumbMap[id]) {
+      delete thumbMap[id];
+      await writeThumbMap(thumbMap);
+    }
+
+    spriteJobs.delete(id);
+
     return { success: true };
   } catch (e) {
     console.error("Error deleting video:", e);
     return reply.status(500).send({ error: "Failed to delete video" });
   }
 });
-
-const spriteJobs = new Map();
-
-async function runSpriteGeneration(id, filename, filePath) {
-  const ext = path.extname(filename);
-  const title = path.basename(filename, ext);
-  const job = { videoId: id, title, status: "extracting", current: 0, total: 0, error: null };
-  spriteJobs.set(id, job);
-  const startTime = Date.now();
-
-  console.log(`  sprites: "${title}" — extracting frames...`);
-
-  let progressInterval = null;
-
-  try {
-    const spriteDir = path.join(SPRITES_DIR, id);
-    const tempDir = path.join(spriteDir, "temp");
-
-    if (await fileExists(spriteDir)) {
-      await fsp.rm(spriteDir, { recursive: true });
-    }
-
-    await fsp.mkdir(tempDir, { recursive: true });
-
-    const { stdout: durationOut } = await execFileAsync("ffprobe", [
-      "-v", "error",
-      "-show_entries", "format=duration",
-      "-of", "default=noprint_wrappers=1:nokey=1",
-      filePath,
-    ]);
-
-    const durationSecs = parseFloat(durationOut.trim());
-    if (isNaN(durationSecs)) {
-      job.status = "error";
-      job.error = "Could not determine video duration";
-      return;
-    }
-
-    let interval;
-    if (durationSecs < 60) interval = 1;
-    else if (durationSecs < 600) interval = 2;
-    else if (durationSecs < 3600) interval = 5;
-    else interval = 10;
-
-    const expectedFrames = Math.ceil(durationSecs / interval);
-    job.total = expectedFrames;
-
-    const workerCount = Math.min(Math.max(Math.floor(os.cpus().length / 2), 2), 8);
-    const segmentDuration = durationSecs / workerCount;
-
-    const segments = [];
-    for (let w = 0; w < workerCount; w++) {
-      const segStart = w * segmentDuration;
-      const segEnd = Math.min((w + 1) * segmentDuration, durationSecs);
-      const firstFrame = Math.floor(segStart / interval);
-      const lastFrame = Math.ceil(segEnd / interval) - 1;
-      if (lastFrame < firstFrame) continue;
-      const segDir = path.join(tempDir, `seg_${w}`);
-      segments.push({ segStart, segEnd, firstFrame, segDir });
-    }
-
-    await Promise.all(segments.map((s) => fsp.mkdir(s.segDir, { recursive: true })));
-
-    const workerTasks = segments.map((s) =>
-      execFileAsync("ffmpeg", [
-        "-ss", String(s.segStart),
-        "-i", filePath,
-        "-t", String(s.segEnd - s.segStart),
-        "-vf", `fps=1/${interval},scale=480:270`,
-        "-q:v", "2",
-        path.join(s.segDir, "frame_%04d.jpg"),
-      ])
-    );
-
-    progressInterval = setInterval(async () => {
-      try {
-        let count = 0;
-        for (const s of segments) {
-          try {
-            const files = await fsp.readdir(s.segDir);
-            count += files.filter((f) => f.endsWith(".jpg")).length;
-          } catch {}
-        }
-        job.current = count;
-      } catch {}
-    }, 500);
-
-    await Promise.all(workerTasks);
-
-    clearInterval(progressInterval);
-    progressInterval = null;
-
-    let globalIndex = 1;
-    for (const s of segments) {
-      const segFrames = (await fsp.readdir(s.segDir))
-        .filter((f) => f.endsWith(".jpg"))
-        .sort();
-      for (const frame of segFrames) {
-        const dest = path.join(tempDir, `frame_${String(globalIndex).padStart(4, "0")}.jpg`);
-        await fsp.rename(path.join(s.segDir, frame), dest);
-        globalIndex++;
-      }
-      await fsp.rm(s.segDir, { recursive: true });
-    }
-
-    const frames = (await fsp.readdir(tempDir)).filter((f) => f.startsWith("frame_") && f.endsWith(".jpg"));
-    const frameCount = frames.length;
-    job.current = frameCount;
-    job.total = frameCount;
-
-    if (frameCount === 0) {
-      await fsp.rm(spriteDir, { recursive: true });
-      job.status = "error";
-      job.error = "No frames extracted";
-      return;
-    }
-
-    job.status = "tiling";
-    console.log(`  sprites: "${title}" — ${frameCount} frames, tiling...`);
-
-    const cols = 10;
-    const rows = Math.ceil(frameCount / cols);
-
-    await execFileAsync("ffmpeg", [
-      "-i", path.join(tempDir, "frame_%04d.jpg"),
-      "-filter_complex", `tile=${cols}x${rows}:padding=0`,
-      "-q:v", "2",
-      path.join(spriteDir, "sprite.jpg"),
-    ]);
-
-    const formatTime = (s) => {
-      const h = Math.floor(s / 3600);
-      const m = Math.floor((s % 3600) / 60);
-      const sec = Math.floor(s % 60);
-      const ms = Math.round((s % 1) * 1000);
-      return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}.${ms.toString().padStart(3, "0")}`;
-    };
-
-    let vtt = "WEBVTT\n\n";
-    for (let i = 1; i <= frameCount; i++) {
-      const startTime = (i - 1) * interval;
-      if (startTime >= durationSecs) break;
-      const endTime = Math.min(i * interval, durationSecs);
-      const x = ((i - 1) % cols) * 480;
-      const y = Math.floor((i - 1) / cols) * 270;
-
-      vtt += `${i}\n`;
-      vtt += `${formatTime(startTime)} --> ${formatTime(endTime)}\n`;
-      vtt += `/api/sprites/${id}/image#xywh=${x},${y},480,270\n\n`;
-    }
-
-    await fsp.writeFile(path.join(spriteDir, "sprite.vtt"), vtt);
-    await fsp.rm(tempDir, { recursive: true });
-
-    job.status = "done";
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`  sprites: "${title}" — done in ${elapsed}s`);
-  } catch (e) {
-    console.error(`  sprites: "${title}" — failed: ${e.message}`);
-    if (e?.stderr) {
-      console.error(`  sprites: "${title}" — stderr:\n${e.stderr.toString()}`);
-    }
-    if (e?.stdout) {
-      console.error(`  sprites: "${title}" — stdout:\n${e.stdout.toString()}`);
-    }
-    job.status = "error";
-    job.error = "Failed to generate sprites";
-  } finally {
-    if (progressInterval) clearInterval(progressInterval);
-    setTimeout(() => spriteJobs.delete(id), 10000);
-  }
-}
 
 app.post("/api/videos/:id/sprites", async (request, reply) => {
   const { id } = request.params;
@@ -603,21 +314,16 @@ app.post("/api/videos/:id/sprites", async (request, reply) => {
     return reply.status(404).send({ error: "Video not found" });
   }
 
-  if (spriteJobs.has(id) && spriteJobs.get(id).status === "extracting") {
+  if (isJobRunning(spriteJobs.get(id))) {
     return reply.status(409).send({ error: "Sprite generation already in progress" });
   }
 
   runSpriteGeneration(id, filename, filePath);
-
   return { success: true, message: "Sprite generation started" };
 });
 
-app.get("/api/sprites/progress", async (request, reply) => {
-  const jobs = [];
-  for (const [id, job] of spriteJobs) {
-    jobs.push({ ...job });
-  }
-  return { jobs };
+app.get("/api/sprites/progress", async () => {
+  return { jobs: Array.from(spriteJobs.values(), (job) => ({ ...job })) };
 });
 
 app.get("/api/sprites/:id/image", async (request, reply) => {
@@ -642,14 +348,14 @@ app.get("/api/sprites/:id/vtt", async (request, reply) => {
   return reply.type("text/vtt").send(fs.createReadStream(vttPath));
 });
 
-app.get("/api/sprites/:id/status", async (request, reply) => {
+app.get("/api/sprites/:id/status", async (request) => {
   const { id } = request.params;
   const spriteDir = path.join(SPRITES_DIR, id);
-  const spriteExists =
+  const exists =
     (await fileExists(path.join(spriteDir, "sprite.jpg"))) &&
     (await fileExists(path.join(spriteDir, "sprite.vtt")));
 
-  return { exists: spriteExists };
+  return { exists };
 });
 
 app.get("/api/stream/:id", async (request, reply) => {
@@ -663,16 +369,7 @@ app.get("/api/stream/:id", async (request, reply) => {
 
   const stats = await fsp.stat(filePath);
   const ext = path.extname(filename).toLowerCase();
-
-  const mimeTypes = {
-    ".mp4": "video/mp4",
-    ".mkv": "video/x-matroska",
-    ".avi": "video/x-msvideo",
-    ".webm": "video/webm",
-    ".mov": "video/quicktime",
-  };
-
-  const contentType = mimeTypes[ext] || "video/mp4";
+  const contentType = VIDEO_MIME_TYPES[ext] || "video/mp4";
   const isDownload = request.query.download !== undefined;
 
   if (isDownload) {
@@ -714,32 +411,29 @@ app.get("/api/stream/:id", async (request, reply) => {
 app.get("/api/files", async (request, reply) => {
   const subPath = request.query.path || "";
 
-  if (!isPathSafe(subPath)) {
+  if (!isPathSafe(DATA_DIR, subPath)) {
     return reply.status(403).send({ error: "Access denied" });
   }
 
   const targetDir = path.resolve(DATA_DIR, subPath);
-
   if (!(await fileExists(targetDir))) {
     return reply.status(404).send({ error: "Directory not found" });
   }
 
   try {
     const entries = await fsp.readdir(targetDir, { withFileTypes: true });
-    const items = await Promise.all(
-      entries.map(async (entry) => {
-        const fullPath = path.join(targetDir, entry.name);
-        const stats = await fsp.stat(fullPath);
-        const relativePath = path.relative(DATA_DIR, fullPath);
-        return {
-          name: entry.name,
-          path: relativePath,
-          size: entry.isDirectory() ? 0 : stats.size,
-          isFolder: entry.isDirectory(),
-          modified: stats.mtime,
-        };
-      })
-    );
+    const items = await Promise.all(entries.map(async (entry) => {
+      const fullPath = path.join(targetDir, entry.name);
+      const stats = await fsp.stat(fullPath);
+      const relativePath = path.relative(DATA_DIR, fullPath);
+      return {
+        name: entry.name,
+        path: relativePath,
+        size: entry.isDirectory() ? 0 : stats.size,
+        isFolder: entry.isDirectory(),
+        modified: stats.mtime,
+      };
+    }));
 
     items.sort((a, b) => {
       if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
@@ -759,8 +453,7 @@ app.post("/api/files/rename", async (request, reply) => {
   if (!oldPath || !newPath) {
     return reply.status(400).send({ error: "oldPath and newPath are required" });
   }
-
-  if (!isPathSafe(oldPath) || !isPathSafe(newPath)) {
+  if (!isPathSafe(DATA_DIR, oldPath) || !isPathSafe(DATA_DIR, newPath)) {
     return reply.status(403).send({ error: "Access denied" });
   }
 
@@ -783,12 +476,11 @@ app.post("/api/files/rename", async (request, reply) => {
 app.delete("/api/files/*", async (request, reply) => {
   const targetPath = request.params["*"];
 
-  if (!isPathSafe(targetPath)) {
+  if (!isPathSafe(DATA_DIR, targetPath)) {
     return reply.status(403).send({ error: "Access denied" });
   }
 
   const fullPath = path.resolve(DATA_DIR, targetPath);
-
   if (!(await fileExists(fullPath))) {
     return reply.status(404).send({ error: "File or folder not found" });
   }
@@ -802,7 +494,7 @@ app.delete("/api/files/*", async (request, reply) => {
   }
 });
 
-app.get("/ws/terminal", { websocket: true }, (socket, req) => {
+app.get("/ws/terminal", { websocket: true }, (socket) => {
   const shell = process.env.SHELL || "/bin/bash";
   const cwd = fs.existsSync(DATA_DIR) ? DATA_DIR : process.cwd();
   const decoder = new TextDecoder();
@@ -814,7 +506,7 @@ app.get("/ws/terminal", { websocket: true }, (socket, req) => {
     if (isAlive && socket.readyState === 1) {
       try {
         socket.send(JSON.stringify({ type, ...data }));
-      } catch (e) {
+      } catch {
         // Ignore send errors
       }
     }
@@ -826,7 +518,7 @@ app.get("/ws/terminal", { websocket: true }, (socket, req) => {
       try {
         proc.kill();
         proc.terminal?.close();
-      } catch (e) {
+      } catch {
         // Already dead
       }
       proc = null;
@@ -835,7 +527,7 @@ app.get("/ws/terminal", { websocket: true }, (socket, req) => {
 
   try {
     proc = Bun.spawn([shell], {
-      cwd: cwd,
+      cwd,
       env: {
         ...process.env,
         TERM: "xterm-256color",
@@ -845,13 +537,13 @@ app.get("/ws/terminal", { websocket: true }, (socket, req) => {
       terminal: {
         cols: 80,
         rows: 24,
-        data(terminal, data) {
-          send("output", { data: typeof data === "string" ? data : new TextDecoder().decode(data) });
+        data(_terminal, data) {
+          send("output", { data: typeof data === "string" ? data : decoder.decode(data) });
         },
       },
     });
   } catch (e) {
-    send("error", { message: "Failed to spawn shell: " + e.message });
+    send("error", { message: `Failed to spawn shell: ${e.message}` });
     socket.close();
     return;
   }
@@ -870,26 +562,23 @@ app.get("/ws/terminal", { websocket: true }, (socket, req) => {
 
       switch (msg.type) {
         case "input":
-          if (typeof msg.data === "string") {
-            proc.terminal.write(msg.data);
-          }
+          if (typeof msg.data === "string") proc.terminal.write(msg.data);
           break;
-
-        case "resize":
+        case "resize": {
           const cols = Math.max(1, Math.min(500, parseInt(msg.cols, 10) || 80));
           const rows = Math.max(1, Math.min(200, parseInt(msg.rows, 10) || 24));
           try {
             proc.terminal.resize(cols, rows);
-          } catch (e) {
+          } catch {
             // Ignore resize errors
           }
           break;
-
+        }
         case "ping":
           send("pong");
           break;
       }
-    } catch (e) {
+    } catch {
       // Ignore parse errors
     }
   });
@@ -898,7 +587,7 @@ app.get("/ws/terminal", { websocket: true }, (socket, req) => {
   socket.on("error", cleanup);
 });
 
-app.get("/terminal", async (request, reply) => {
+app.get("/terminal", async (_request, reply) => {
   const terminalHtml = path.join(__dirname, "terminal.html");
   const content = await fsp.readFile(terminalHtml, "utf-8");
   return reply.type("text/html").send(content);
@@ -919,12 +608,18 @@ app.setNotFoundHandler(async (request, reply) => {
 
 const start = async () => {
   try {
-    await app.listen({ port: 3000, host: "0.0.0.0" });
-    console.log("Server running on :3000");
+    const port = Number(process.env.PORT || 3000);
+    await app.listen({ port, host: "0.0.0.0" });
+    console.log(`Server running on :${port}`);
   } catch (err) {
-    console.error("Failed to start server:", err.message);
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("Failed to start server:", message);
     process.exit(1);
   }
 };
 
-start();
+if (process.env.NO_AUTO_LISTEN !== "1") {
+  start();
+}
+
+export { app };

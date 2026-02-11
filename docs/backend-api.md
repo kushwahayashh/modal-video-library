@@ -32,6 +32,8 @@
 ### `POST /api/thumbnail-map`
 - Body: `{ videoId, imageUrl }`
 - Upserts thumbnail map entry.
+- Validation:
+  - Returns `400` when `videoId` or `imageUrl` is missing/blank/non-string.
 
 ## Video Library
 
@@ -57,9 +59,11 @@
 - Preserves original extension.
 - Sanitizes invalid filename characters.
 - Renames sprite folder from old ID to new ID and rewrites VTT sprite URL references.
+- Moves thumbnail override mapping from old ID to new ID when present.
 
 ### `DELETE /api/videos/:id`
 - Deletes video file.
+- Also deletes sprite directory and thumbnail override entry for the same video ID.
 
 ## Sprite Endpoints
 

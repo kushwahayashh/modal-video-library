@@ -133,8 +133,14 @@ def run():
         except Exception:
             proc.kill()
 
+    print_lock = threading.Lock()
+
+    def log(message=""):
+        with print_lock:
+            print(message, flush=True)
+
     ensure_dirs()
-    print("\n  \033[1mVIDEOLIB\033[0m starting...\n")
+    log("\n  \033[1mVIDEOLIB\033[0m starting...\n")
 
     tunnel_ready = threading.Event()
     server_ready = threading.Event()
@@ -146,7 +152,7 @@ def run():
         cf_state["posted"] = post_cf_url(cf_state["url"])
 
     # Start tunnel
-    print("  Starting tunnel...", end=" ", flush=True)
+    log("  Starting tunnel...")
     cf_proc = subprocess.Popen(
         ["cloudflared", "tunnel", "--url", f"http://localhost:{SERVER_PORT}"],
         stdout=subprocess.PIPE,
@@ -162,14 +168,14 @@ def run():
             if match and not url_found:
                 url_found = True
                 cf_url = match.group(0)
-                print(f"\033[32mdone\033[0m")
-                print(f"\n  \033[1mPublic URL:\033[0m \033[36m{cf_url}\033[0m\n")
+                log(f"  Starting tunnel... \033[32mdone\033[0m")
+                log(f"\n  \033[1mPublic URL:\033[0m \033[36m{cf_url}\033[0m\n")
                 cf_url_store["url"] = cf_url
                 cf_state["url"] = cf_url
                 tunnel_ready.set()
                 maybe_post_cf_url()
         if not url_found:
-            print("\033[31mfailed\033[0m")
+            log(f"  Starting tunnel... \033[31mfailed\033[0m")
             tunnel_ready.set()
 
     capture_thread = threading.Thread(target=capture_cf_url, args=(cf_proc,), daemon=True)
@@ -206,22 +212,18 @@ def run():
 
     # Then wait for build to finish
     if not build_done.is_set():
-        print("  Building client...", end=" ", flush=True)
         build_done.wait()
-        if build_error["err"]:
-            print("\033[31mfailed\033[0m")
-            if build_error["stderr"]:
-                print(build_error["stderr"].rstrip())
-            raise build_error["err"]
-        print("\033[32mdone\033[0m")
-    else:
-        if build_error["err"]:
-            if build_error["stderr"]:
-                print(build_error["stderr"].rstrip())
-            raise build_error["err"]
+
+    if build_error["err"]:
+        log(f"  Building client... \033[31mfailed\033[0m")
+        if build_error["stderr"]:
+            log(build_error["stderr"].rstrip())
+        raise build_error["err"]
+
+    log(f"  Building client... \033[32mdone\033[0m")
 
     # Start server
-    print("  Starting server...", end=" ", flush=True)
+    log("  Starting server...")
     server_proc = subprocess.Popen(
         ["bun", "run", "start"],
         cwd=f"{APP_ROOT}/server",
@@ -232,18 +234,18 @@ def run():
     )
 
     if wait_for_health(HEALTH_URL, timeout=30):
-        print("\033[32mdone\033[0m")
+        log(f"  Starting server... \033[32mdone\033[0m")
         server_ready.set()
         maybe_post_cf_url()
     else:
-        print("\033[31mfailed\033[0m")
+        log(f"  Starting server... \033[31mfailed\033[0m")
         raise RuntimeError("Server did not become healthy in time.")
 
     def pipe_server_output():
         for line in server_proc.stdout:
             line_str = line.rstrip()
             if line_str:
-                print(f"  {line_str}")
+                log(f"  {line_str}")
 
     server_thread = threading.Thread(target=pipe_server_output, daemon=True)
     server_thread.start()
