@@ -7,11 +7,13 @@ import type { ActionModalType, VideoProperties } from "./types";
 
 interface VideoActionModalProps {
   actionModal: ActionModalType;
+  closing: boolean;
   actionVideo: Video | null;
   actionLoading: boolean;
   renameValue: string;
   onRenameValueChange: (value: string) => void;
   onClose: () => void;
+  onClosed: () => void;
   onRenameKeyDown: (e: ReactKeyboardEvent<HTMLInputElement>) => void;
   onConfirmRename: () => void;
   onConfirmDelete: () => void;
@@ -67,11 +69,13 @@ function ModalHeader({ onClose }: { onClose: () => void }) {
 
 export default function VideoActionModal({
   actionModal,
+  closing,
   actionVideo,
   actionLoading,
   renameValue,
   onRenameValueChange,
   onClose,
+  onClosed,
   onRenameKeyDown,
   onConfirmRename,
   onConfirmDelete,
@@ -83,7 +87,8 @@ export default function VideoActionModal({
   selectedThumbnail,
   onThumbnailSelect,
 }: VideoActionModalProps) {
-  if (!actionModal || !actionVideo) return null;
+  if ((!actionModal || !actionVideo) && !closing) return null;
+  if (!actionVideo) return null;
 
   const summaryItems: SummaryItem[] = [
     {
@@ -124,7 +129,15 @@ export default function VideoActionModal({
   }`;
 
   return (
-    <div className="action-modal-overlay" onClick={onClose}>
+    <div
+      className={`action-modal-overlay${closing ? " closing" : ""}`}
+      onClick={onClose}
+      onAnimationEnd={(e) => {
+        if (closing && e.animationName === "actionModalFadeOut" && e.target === e.currentTarget) {
+          onClosed();
+        }
+      }}
+    >
       <div className={modalClassName} onClick={(e) => e.stopPropagation()}>
         <ModalHeader onClose={onClose} />
 

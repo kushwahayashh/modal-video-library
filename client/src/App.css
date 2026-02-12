@@ -548,12 +548,22 @@
   justify-content: center;
   z-index: 2000;
   padding: 20px;
-  animation: fadeIn 0.2s ease;
+  animation: actionModalFadeIn 0.2s ease;
 }
 
-@keyframes fadeIn {
+.action-modal-overlay.closing {
+  animation: actionModalFadeOut 0.2s ease forwards;
+  pointer-events: none;
+}
+
+@keyframes actionModalFadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes actionModalFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 .action-modal {
@@ -564,6 +574,21 @@
   border: 1px solid var(--border);
   padding: 24px;
   animation: slideUp 0.2s ease;
+}
+
+.action-modal-overlay.closing .action-modal {
+  animation: slideDown 0.2s ease forwards;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(10px);
+  }
 }
 
 @keyframes slideUp {

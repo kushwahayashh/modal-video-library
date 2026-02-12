@@ -31,6 +31,7 @@ function App() {
     video: null,
   });
   const [actionModal, setActionModal] = useState<ActionModalType>(null);
+  const [actionModalClosing, setActionModalClosing] = useState(false);
   const [actionVideo, setActionVideo] = useState<Video | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [videoProps, setVideoProps] = useState<VideoProperties | null>(null);
@@ -111,6 +112,7 @@ function App() {
   }, []);
 
   const openActionModal = (type: ActionModalType, video: Video) => {
+    setActionModalClosing(false);
     setActionVideo(video);
     setActionModal(type);
     if (type === "rename") {
@@ -125,12 +127,18 @@ function App() {
   };
 
   const closeActionModal = () => {
+    if (!actionModal) return;
+    setActionModalClosing(true);
+  };
+
+  const finalizeCloseActionModal = useCallback(() => {
+    setActionModalClosing(false);
     setActionModal(null);
     setActionVideo(null);
     setRenameValue("");
     setVideoProps(null);
     setActionLoading(false);
-  };
+  }, []);
 
   const confirmRename = useCallback(async () => {
     if (!renameValue.trim() || !actionVideo) return;
@@ -408,11 +416,13 @@ function App() {
 
       <VideoActionModal
         actionModal={actionModal}
+        closing={actionModalClosing}
         actionVideo={actionVideo}
         actionLoading={actionLoading}
         renameValue={renameValue}
         onRenameValueChange={setRenameValue}
         onClose={closeActionModal}
+        onClosed={finalizeCloseActionModal}
         onRenameKeyDown={handleRenameKeyDown}
         onConfirmRename={confirmRename}
         onConfirmDelete={confirmDelete}
