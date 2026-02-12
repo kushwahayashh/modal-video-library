@@ -39,6 +39,7 @@ function App() {
   const { pushToast: pushToastRaw, updateToast, removeToast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<Plyr | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
   const hasVideoDetails = !!(
     videoProps?.resolution ||
     videoProps?.videoCodec ||
@@ -243,18 +244,28 @@ function App() {
   }, [activeSpriteJobs, pushToastRaw, updateToast, removeToast]);
 
   const openModal = (video: Video) => {
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
     setSelectedVideo(video);
-    setTimeout(() => setModalVisible(true), 10);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setModalVisible(true));
+    });
   };
 
   const closeModal = useCallback(() => {
     setModalVisible(false);
-    setTimeout(() => {
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+    }
+    closeTimerRef.current = window.setTimeout(() => {
       if (playerRef.current) {
         playerRef.current.destroy();
         playerRef.current = null;
       }
       setSelectedVideo(null);
+      closeTimerRef.current = null;
     }, 300);
   }, []);
 
@@ -281,8 +292,7 @@ function App() {
         generateSprites(video);
         break;
       case "thumbnail":
-        setActionVideo(video);
-        setActionModal("thumbnail");
+        openActionModal("thumbnail", video);
         break;
       case "delete":
         openActionModal("delete", video);
@@ -298,13 +308,17 @@ function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape" && selectedVideo) {
-        closeModal();
+      if (e.key === "Escape") {
+        if (actionModal) {
+          closeActionModal();
+        } else if (selectedVideo) {
+          closeModal();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedVideo, closeModal]);
+  }, [selectedVideo, closeModal, actionModal]);
 
   useEffect(() => {
     if (selectedVideo && videoRef.current && !playerRef.current) {
@@ -352,7 +366,7 @@ function App() {
     <div className="app">
       <nav className="nav">
         <div className="container nav-content">
-          <a className="nav-logo" href="https://your-app.modal.run/">
+          <a className="nav-logo" href="/">
             VIDEO<span>LIB</span>
           </a>
 
@@ -387,6 +401,12 @@ function App() {
               <div className="empty-icon">📁</div>
               <h2>No videos yet</h2>
               <p>Upload or download videos to get started</p>
+            </div>
+          ) : filteredVideos.length === 0 ? (
+            <div className="empty">
+              <div className="empty-icon">🔍</div>
+              <h2>No results</h2>
+              <p>No videos match your search</p>
             </div>
           ) : (
             <div className="video-grid">

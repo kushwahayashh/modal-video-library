@@ -39,6 +39,7 @@
 
 ### `GET /api/videos`
 - Returns `{ videos, total }`.
+- Recursively scans `/data/videos` including subfolders.
 - Each video item includes:
   - `id`, `title`, `filename`
   - `size`, `sizeBytes`, `createdAt`
@@ -56,7 +57,7 @@
 
 ### `POST /api/videos/:id/rename`
 - Body: `{ newName }`.
-- Preserves original extension.
+- Preserves original extension and parent subfolder.
 - Sanitizes invalid filename characters.
 - Renames sprite folder from old ID to new ID and rewrites VTT sprite URL references.
 - Moves thumbnail override mapping from old ID to new ID when present.

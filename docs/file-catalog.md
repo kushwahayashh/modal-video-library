@@ -37,6 +37,15 @@ This catalog covers all tracked repository files (excluding generated folders li
 - `client/src/FileManager.tsx`: React file manager page.
 - `client/src/FileManager.css`: file manager styling.
 - `client/src/components/ThumbnailPicker.tsx`: thumbnail selection component with loading skeletons.
+- `client/src/components/ToastProvider.tsx`: global toast context provider and hook.
+- `client/src/components/ToastStack.tsx`: toast notification stack renderer.
+- `client/src/components/ToastStack.css`: toast notification styling.
+- `client/src/components/video-library/ContextMenu.tsx`: right-click context menu with viewport clamping.
+- `client/src/components/video-library/VideoCard.tsx`: video card with lazy thumbnail loading via intersection observer.
+- `client/src/components/video-library/VideoPlayerModal.tsx`: video player modal with Plyr integration.
+- `client/src/components/video-library/VideoActionModal.tsx`: action modal for rename, delete, properties, and thumbnail selection.
+- `client/src/components/video-library/helpers.ts`: stable placeholder selection and thumbnail save helper.
+- `client/src/components/video-library/types.ts`: shared types for context menu state, action modal, and video properties.
 - `client/src/hooks/useSpriteProgress.ts`: sprite progress polling hook.
 - `client/src/index.css`: global tokens and reset styles.
 - `client/src/types.ts`: shared TS interfaces.

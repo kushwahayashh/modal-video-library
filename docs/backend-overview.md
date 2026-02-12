@@ -19,7 +19,7 @@
 - `app` is exported from `server/src/index.js` for contract test usage.
 
 ## Core Helpers
-- `toBase64Url()` and `fromBase64Url()`: map filenames to URL-safe IDs.
+- `toBase64Url()` and `fromBase64Url()`: map relative file paths to URL-safe IDs.
 - `fileExists()`: async path existence check.
 - `getVideoDuration()`: ffprobe duration extraction with path+mtime cache and bounded LRU-style eviction.
 - `getVideoMetadata()`: ffprobe stream/format metadata extraction.
@@ -39,7 +39,7 @@
   - Job removed 10 seconds after completion/failure.
 
 ## File and Stream Handling
-- Video list from `/data/videos` filtered by extension.
+- Video list from `/data/videos` scanned recursively (including subfolders) and filtered by extension.
 - Stream route supports:
   - Download mode with `Content-Disposition`.
   - HTTP byte-range partial content for playback.

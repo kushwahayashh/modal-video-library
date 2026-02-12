@@ -17,14 +17,28 @@ A self-hosted video library app that runs locally or on Modal with a Cloudflare 
 ├── server/           # Bun + Fastify backend
 │   ├── package.json
 │   └── src/
-│       └── index.js
+│       ├── index.js
+│       └── lib/      # Backend service modules
 └── client/           # React + Vite frontend
     ├── package.json
     └── src/
         ├── App.tsx
         ├── FileManager.tsx
         ├── types.ts
-        └── utils.ts
+        ├── utils.ts
+        ├── hooks/
+        │   └── useSpriteProgress.ts
+        └── components/
+            ├── ThumbnailPicker.tsx
+            ├── ToastProvider.tsx
+            ├── ToastStack.tsx
+            └── video-library/
+                ├── ContextMenu.tsx
+                ├── VideoCard.tsx
+                ├── VideoPlayerModal.tsx
+                ├── VideoActionModal.tsx
+                ├── helpers.ts
+                └── types.ts
 ```
 
 ## Running Locally
@@ -86,14 +100,15 @@ cd client && bun install && bun run dev
 - [x] Video library browsing
 - [x] Video streaming/playback (Plyr)
 - [x] Search
-- [x] Context menu (play, download, copy link, rename, delete, properties)
+- [x] Context menu (play, download, copy link, rename, delete, properties, thumbnails, sprites)
 - [x] Sprite generation (preview thumbnails on seek bar)
   - Parallel ffmpeg frame extraction across CPU cores
   - Real-time progress tracking (persists across page refresh)
   - Plyr preview thumbnails via WebVTT
+- [x] Toast notification system
 - [x] File manager
 - [x] Web terminal
 - [ ] Video downloading (yt-dlp, aria2c)
-- [ ] Metadata extraction
-- [ ] Thumbnail generation for library grid
+- [x] Metadata extraction (video properties modal)
+- [x] Thumbnail selection for library grid
 - [ ] Tags and categories

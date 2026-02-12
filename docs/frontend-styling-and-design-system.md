@@ -29,8 +29,14 @@
 - Neutral/dark monochrome visual language.
 - Border radii are mostly minimal (4px) with some 8px modal corners.
 - Overlays use translucent dark backgrounds and selective backdrop blur.
-- Most interactions are transition-based, not transform-heavy animation.
+- Video player modal uses CSS transitions for open/close.
+- Action modals use CSS keyframe animations (`actionModalFadeIn`/`actionModalFadeOut`, `slideUp`/`slideDown`) with `onAnimationEnd` for cleanup.
+- Context menu uses `contextMenuFadeIn` animation on mount.
 
 ## Note on Consistency
 - `server/src/terminal.html` mirrors main token set closely.
 - `server/src/manager.html` has its own embedded token set and uses Space Mono instead of Space Grotesk.
+
+## Toast Notifications
+- Toast styles are in `client/src/components/ToastStack.css`.
+- Supports `error`, `success`, and `status` (with progress bar) variants.

@@ -23,7 +23,7 @@
 - `/data/thumbnail-map.json`: frontend-selected thumbnail overrides.
 
 ## Identifier and Path Strategy
-- Video IDs are base64url-encoded filenames.
+- Video IDs are base64url-encoded relative paths (e.g., `subfolder/video.mp4` for nested files).
 - All file-manager operations are validated via `isPathSafe()` against `DATA_DIR`.
 - Sprite output paths are keyed by video ID.
 
@@ -31,7 +31,7 @@
 
 ### Video Library Load
 1. Frontend fetches `/api/videos`.
-2. Backend scans `/data/videos`, computes size, created time, duration, sprite availability.
+2. Backend recursively scans `/data/videos` (including subfolders), computes size, created time, duration, sprite availability.
 3. Frontend renders cards and fetches placeholder + thumbnail map.
 
 ### Playback

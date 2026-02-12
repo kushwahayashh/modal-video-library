@@ -17,9 +17,9 @@
 - Playback: `selectedVideo`, `modalVisible`, `videoRef`, `playerRef`.
 - Search: `search`.
 - Context menu: `contextMenu`.
-- Action modals: `actionModal`, `actionVideo`, `renameValue`, `actionLoading`.
+- Action modals: `actionModal`, `actionModalClosing`, `actionVideo`, `renameValue`, `actionLoading`.
 - Properties: `videoProps`.
-- Sprite status: `spriteProgress`.
+- Sprite status: `activeSpriteJobs` (via `useSpriteProgress` hook).
 - Thumbnail sources: `placeholderImages`, `thumbnailOverrides`, `placeholdersLoading`.
 
 ## Data Fetching
@@ -59,10 +59,15 @@
 ## Player Lifecycle
 - Plyr is created once when modal opens and ref exists.
 - Thumbnail track element is appended when sprite metadata exists.
-- ESC key closes modal.
-- Player destroyed on close transition completion.
+- ESC key closes action modals first, then video player modal.
+- Player destroyed on close transition completion (race-safe via `closeTimerRef`).
+
+## Modal Animations
+- Action modals use CSS animation-based fade-in/fade-out with `onAnimationEnd` for cleanup (no timers).
+- Video player modal uses CSS transition-based open/close with race-safe timer cleanup via `closeTimerRef`.
+- Search shows a "no results" empty state when filtering produces zero matches.
 
 ## Error Handling
 - Uses fallback empty states on fetch failures.
-- Uses alert for operation failures (rename/delete/sprite).
+- Uses toast notifications for operation failures (rename/delete/sprite).
 - Defensive catch blocks avoid app crashes on background polling errors.

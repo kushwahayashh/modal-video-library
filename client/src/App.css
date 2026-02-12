@@ -652,6 +652,8 @@
   color: var(--text-secondary);
   line-height: 1.6;
   margin-bottom: 20px;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .action-modal-message .text-muted {

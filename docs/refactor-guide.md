@@ -1,8 +1,8 @@
 # Refactor Guide
 
 ## Current Coupling Points
-- `client/src/App.tsx` mixes data fetching, modal orchestration, sprite polling, player lifecycle, and context-menu logic.
-- `server/src/index.js` contains all route registration and all service logic in one file.
+- `client/src/App.tsx` orchestrates data fetching, modal state, and action wiring; context menu, video card, player modal, and action modal have been extracted to `client/src/components/video-library/`.
+- `server/src/` has been split into modules under `server/src/lib/`; main entrypoint is `server/src/index.js`.
 - Duplicate utility UI exists for file manager:
   - React page (`client/src/FileManager.tsx`)
   - standalone HTML (`server/src/manager.html`)
@@ -23,10 +23,10 @@
 
 ## Frontend Extraction Targets
 - `useVideos()` hook for list fetch + refresh.
-- `useSpriteProgress()` hook for polling lifecycle.
-- `VideoPlayerModal` component.
-- `VideoContextMenu` component.
-- `VideoActionsModal` component.
+- ~~`useSpriteProgress()` hook~~ — done (`client/src/hooks/useSpriteProgress.ts`).
+- ~~`VideoPlayerModal` component~~ — done (`client/src/components/video-library/VideoPlayerModal.tsx`).
+- ~~`VideoContextMenu` component~~ — done (`client/src/components/video-library/ContextMenu.tsx`).
+- ~~`VideoActionsModal` component~~ — done (`client/src/components/video-library/VideoActionModal.tsx`).
 
 ## Contract Hardening
 - Define shared API schemas for:
@@ -37,6 +37,6 @@
 - Align backend and frontend with runtime validation where needed.
 
 ## Quality Improvements to Consider
-- Replace ad-hoc `alert` usage with a unified toast system.
+- ~~Replace ad-hoc `alert` usage with a unified toast system~~ — done (`ToastProvider` + `ToastStack`).
 - Add backend route tests for path safety and rename edge cases.
 - Add e2e tests for sprite generation happy path and failure path.

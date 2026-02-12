@@ -168,24 +168,24 @@ app.get("/api/videos", async () => {
   try {
     if (!(await fileExists(VIDEOS_DIR))) return { videos: [], total: 0 };
 
-    const files = await fsp.readdir(VIDEOS_DIR);
-    const videos = (await Promise.all(files.map(async (file) => {
+    const entries = await fsp.readdir(VIDEOS_DIR, { recursive: true });
+    const videos = (await Promise.all(entries.map(async (relPath) => {
       try {
-        const ext = path.extname(file).toLowerCase();
+        const ext = path.extname(relPath).toLowerCase();
         if (!VIDEO_EXTENSIONS.has(ext)) return null;
-        const filePath = path.join(VIDEOS_DIR, file);
-        const [stats, duration] = await Promise.all([
-          fsp.stat(filePath),
-          getVideoDuration(filePath),
-        ]);
-        const videoId = toBase64Url(file);
+        const filePath = path.join(VIDEOS_DIR, relPath);
+        const stat = await fsp.stat(filePath);
+        if (!stat.isFile()) return null;
+        const duration = await getVideoDuration(filePath);
+        const normalizedPath = relPath.split(path.sep).join("/");
+        const videoId = toBase64Url(normalizedPath);
         return {
           id: videoId,
-          title: path.basename(file, ext),
-          filename: file,
-          size: formatBytes(stats.size),
-          sizeBytes: stats.size,
-          createdAt: stats.birthtime,
+          title: path.basename(relPath, ext),
+          filename: normalizedPath,
+          size: formatBytes(stat.size),
+          sizeBytes: stat.size,
+          createdAt: stat.birthtime,
           thumbnail: null,
           duration,
           hasSprites: fs.existsSync(path.join(SPRITES_DIR, videoId, "sprite.jpg")),
@@ -253,8 +253,9 @@ app.post("/api/videos/:id/rename", async (request, reply) => {
     return reply.status(400).send({ error: "Invalid name" });
   }
 
-  const newFilename = sanitizedName + ext;
-  const newPath = path.join(VIDEOS_DIR, newFilename);
+  const subDir = path.dirname(oldFilename);
+  const newRelPath = subDir === "." ? sanitizedName + ext : subDir + "/" + sanitizedName + ext;
+  const newPath = path.join(VIDEOS_DIR, newRelPath);
 
   if ((await fileExists(newPath)) && newPath !== oldPath) {
     return reply.status(409).send({ error: "A file with that name already exists" });
@@ -262,7 +263,7 @@ app.post("/api/videos/:id/rename", async (request, reply) => {
 
   try {
     await fsp.rename(oldPath, newPath);
-    const newId = toBase64Url(newFilename);
+    const newId = toBase64Url(newRelPath);
 
     const oldSpriteDir = path.join(SPRITES_DIR, id);
     const newSpriteDir = path.join(SPRITES_DIR, newId);
@@ -297,7 +298,7 @@ app.post("/api/videos/:id/rename", async (request, reply) => {
       }
     }
 
-    return { success: true, id: newId, filename: newFilename };
+    return { success: true, id: newId, filename: newRelPath };
   } catch (e) {
     console.error("Error renaming video:", e);
     return reply.status(500).send({ error: "Failed to rename video" });

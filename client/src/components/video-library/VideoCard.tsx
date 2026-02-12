@@ -40,7 +40,7 @@ export default function VideoCard({
   }, []);
 
   const fallbackPlaceholder = getStablePlaceholder(video.id, placeholderImages);
-  const imgSrc = video.thumbnail || thumbnailOverrides[video.id] || fallbackPlaceholder;
+  const imgSrc = thumbnailOverrides[video.id] || video.thumbnail || fallbackPlaceholder;
 
   useEffect(() => {
     setImageLoaded(false);
