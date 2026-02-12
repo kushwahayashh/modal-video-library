@@ -67,9 +67,40 @@ const { spriteJobs, runSpriteGeneration, isJobRunning } = createSpriteService({
 });
 
 let cloudflareUrl = null;
+let lastActivityAt = Date.now();
+let terminalConnectionCount = 0;
+
+const touchActivity = () => {
+  lastActivityAt = Date.now();
+};
+
+app.addHook("onRequest", async (request) => {
+  // Do not count watchdog polling as user activity.
+  if (
+    request.url.startsWith("/api/runtime/status") &&
+    request.headers["x-idle-watchdog"] === "1"
+  ) {
+    return;
+  }
+  touchActivity();
+});
 
 app.get("/api/health", async () => {
   return { status: "ok", timestamp: new Date().toISOString(), cloudflareUrl };
+});
+
+app.get("/api/runtime/status", async () => {
+  let activeSpriteJobs = 0;
+  for (const job of spriteJobs.values()) {
+    if (job?.status === "extracting" || job?.status === "tiling") {
+      activeSpriteJobs++;
+    }
+  }
+  return {
+    lastActivityAt,
+    terminalConnectionCount,
+    activeSpriteJobs,
+  };
 });
 
 app.get("/api/placeholder-images", async () => {
@@ -501,6 +532,9 @@ app.get("/ws/terminal", { websocket: true }, (socket) => {
 
   let proc = null;
   let isAlive = true;
+  let cleaned = false;
+  terminalConnectionCount++;
+  touchActivity();
 
   const send = (type, data = {}) => {
     if (isAlive && socket.readyState === 1) {
@@ -513,7 +547,11 @@ app.get("/ws/terminal", { websocket: true }, (socket) => {
   };
 
   const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
     isAlive = false;
+    terminalConnectionCount = Math.max(0, terminalConnectionCount - 1);
+    touchActivity();
     if (proc) {
       try {
         proc.kill();
@@ -562,9 +600,11 @@ app.get("/ws/terminal", { websocket: true }, (socket) => {
 
       switch (msg.type) {
         case "input":
+          touchActivity();
           if (typeof msg.data === "string") proc.terminal.write(msg.data);
           break;
         case "resize": {
+          touchActivity();
           const cols = Math.max(1, Math.min(500, parseInt(msg.cols, 10) || 80));
           const rows = Math.max(1, Math.min(200, parseInt(msg.rows, 10) || 24));
           try {
@@ -575,6 +615,7 @@ app.get("/ws/terminal", { websocket: true }, (socket) => {
           break;
         }
         case "ping":
+          touchActivity();
           send("pong");
           break;
       }

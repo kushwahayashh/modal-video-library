@@ -324,6 +324,19 @@ function App() {
   }, [selectedVideo]);
 
   useEffect(() => {
+    if (!selectedVideo?.hasSprites) return;
+
+    // Warm both VTT metadata and sprite image as soon as modal opens.
+    fetch(`/api/sprites/${selectedVideo.id}/vtt`).catch(() => {});
+    const preloader = new Image();
+    preloader.src = `/api/sprites/${selectedVideo.id}/image`;
+
+    return () => {
+      preloader.src = "";
+    };
+  }, [selectedVideo]);
+
+  useEffect(() => {
     fetchVideos();
   }, [fetchVideos]);
 

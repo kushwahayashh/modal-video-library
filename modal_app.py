@@ -1,6 +1,7 @@
 import modal
 import subprocess
 import os
+import time
 
 # Persistent volume for videos and data
 volume = modal.Volume.from_name("video-library-data", create_if_missing=True)
@@ -9,6 +10,12 @@ APP_NAME = "video-library"
 APP_ROOT = "/app"
 SERVER_PORT = 3000
 HEALTH_URL = f"http://localhost:{SERVER_PORT}/api/health"
+RUNTIME_STATUS_URL = f"http://localhost:{SERVER_PORT}/api/runtime/status"
+IDLE_TIMEOUT_SECONDS = 4 * 60 * 60
+IDLE_POLL_INTERVAL_SECONDS = 60
+RUN_HEARTBEAT_TTL_SECONDS = 15
+START_LOCK_TTL_SECONDS = 20 * 60
+STARTUP_WAIT_TIMEOUT_SECONDS = 120
 
 
 image = (
@@ -67,14 +74,36 @@ image = (
 
 app = modal.App(APP_NAME, image=image)
 
-# Store the cloudflare URL
+# Store runtime state and cloudflare URL
 cf_url_store = modal.Dict.from_name("cf-url-store", create_if_missing=True)
 
-def _read_cf_url():
+
+def _read_runtime_state():
     try:
-        return cf_url_store.get("url"), None
+        return {
+            "url": cf_url_store.get("url"),
+            "status": cf_url_store.get("status"),
+            "heartbeat": cf_url_store.get("heartbeat"),
+            "launching": cf_url_store.get("launching"),
+        }, None
     except Exception as e:
         return None, e
+
+
+def _is_run_alive(state, now_ts=None):
+    heartbeat = state.get("heartbeat")
+    if not isinstance(heartbeat, (int, float)):
+        return False
+    now_ts = now_ts if now_ts is not None else time.time()
+    return (now_ts - heartbeat) <= RUN_HEARTBEAT_TTL_SECONDS
+
+
+def _no_cache_headers():
+    return {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
 
 
 @app.function(
@@ -90,6 +119,11 @@ def run():
     import json
 
     cf_url_store.pop("url", None)
+    start_ts = time.time()
+    cf_url_store["status"] = "starting"
+    cf_url_store["heartbeat"] = start_ts
+    if not isinstance(cf_url_store.get("launching"), (int, float)):
+        cf_url_store["launching"] = start_ts
 
     # Ensure data directories exist
     def ensure_dirs():
@@ -132,6 +166,19 @@ def run():
             proc.wait(timeout=5)
         except Exception:
             proc.kill()
+
+    def fetch_runtime_status():
+        req = urllib.request.Request(
+            RUNTIME_STATUS_URL,
+            headers={"x-idle-watchdog": "1"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            if resp.status != 200:
+                return None
+            data = json.loads(resp.read().decode("utf-8"))
+            if not isinstance(data, dict):
+                return None
+            return data
 
     print_lock = threading.Lock()
 
@@ -208,11 +255,15 @@ def run():
     build_thread.start()
 
     # Wait for tunnel URL first (up to 15s)
-    tunnel_ready.wait(timeout=15)
+    tunnel_deadline = time.time() + 15
+    while time.time() < tunnel_deadline and not tunnel_ready.is_set():
+        cf_url_store["heartbeat"] = time.time()
+        tunnel_ready.wait(timeout=1)
 
     # Then wait for build to finish
-    if not build_done.is_set():
-        build_done.wait()
+    while not build_done.is_set():
+        cf_url_store["heartbeat"] = time.time()
+        build_done.wait(timeout=1)
 
     if build_error["err"]:
         log(f"  Building client... \033[31mfailed\033[0m")
@@ -235,10 +286,15 @@ def run():
 
     if wait_for_health(HEALTH_URL, timeout=30):
         log(f"  Starting server... \033[32mdone\033[0m")
+        cf_url_store["status"] = "running"
+        cf_url_store["heartbeat"] = time.time()
+        cf_url_store.pop("launching", None)
         server_ready.set()
         maybe_post_cf_url()
     else:
         log(f"  Starting server... \033[31mfailed\033[0m")
+        cf_url_store["status"] = "failed"
+        cf_url_store.pop("launching", None)
         raise RuntimeError("Server did not become healthy in time.")
 
     def pipe_server_output():
@@ -250,30 +306,107 @@ def run():
     server_thread = threading.Thread(target=pipe_server_output, daemon=True)
     server_thread.start()
 
+    last_idle_check = 0.0
+
     try:
         while True:
             if cf_proc.poll() is not None or server_proc.poll() is not None:
                 break
+            now_ts = time.time()
+            cf_url_store["heartbeat"] = now_ts
+
+            if now_ts - last_idle_check >= IDLE_POLL_INTERVAL_SECONDS:
+                last_idle_check = now_ts
+                try:
+                    runtime_status = fetch_runtime_status()
+                    if runtime_status:
+                        terminal_count = int(runtime_status.get("terminalConnectionCount", 0) or 0)
+                        active_jobs = int(runtime_status.get("activeSpriteJobs", 0) or 0)
+                        last_activity_ms = runtime_status.get("lastActivityAt")
+                        last_activity_ts = (
+                            float(last_activity_ms) / 1000.0
+                            if isinstance(last_activity_ms, (int, float))
+                            else now_ts
+                        )
+                        idle_for = max(0.0, now_ts - last_activity_ts)
+
+                        if terminal_count <= 0 and active_jobs <= 0 and idle_for >= IDLE_TIMEOUT_SECONDS:
+                            log("  Idle timeout reached (4h). Stopping app...")
+                            break
+                except Exception:
+                    # Keep running if status probe fails temporarily.
+                    pass
+
             time.sleep(1)
     finally:
         terminate_process(server_proc)
         terminate_process(cf_proc)
+        cf_url_store.pop("url", None)
+        cf_url_store.pop("heartbeat", None)
+        cf_url_store.pop("launching", None)
+        cf_url_store["status"] = "stopped"
 
 
 @app.function()
 @modal.fastapi_endpoint(method="GET")
 def get_cf_url():
-    """Web endpoint that redirects to the Cloudflare tunnel URL"""
+    """Auto-start run() if needed, then redirect to the Cloudflare tunnel URL."""
     from fastapi.responses import RedirectResponse, JSONResponse
-    
-    url, err = _read_cf_url()
+
+    state, err = _read_runtime_state()
     if err:
-        return JSONResponse({"error": str(err)}, status_code=500)
-    if url:
-        return RedirectResponse(url=url, status_code=302)
+        return JSONResponse({"error": str(err)}, status_code=500, headers=_no_cache_headers())
+
+    now_ts = time.time()
+    if state.get("url") and _is_run_alive(state, now_ts):
+        return RedirectResponse(url=state["url"], status_code=307, headers=_no_cache_headers())
+    if state.get("url") and not _is_run_alive(state, now_ts):
+        cf_url_store.pop("url", None)
+
+    should_spawn = True
+    launch_ts = state.get("launching")
+    if isinstance(launch_ts, (int, float)) and (now_ts - launch_ts) < START_LOCK_TTL_SECONDS:
+        should_spawn = False
+    if _is_run_alive(state, now_ts):
+        should_spawn = False
+
+    if should_spawn:
+        cf_url_store["launching"] = now_ts
+        cf_url_store["status"] = "starting"
+        cf_url_store.pop("url", None)
+        try:
+            run.spawn()
+        except Exception as e:
+            cf_url_store["status"] = "failed"
+            cf_url_store.pop("launching", None)
+            return JSONResponse(
+                {"error": f"Failed to launch app: {e}"},
+                status_code=500,
+                headers=_no_cache_headers(),
+            )
+
+    deadline = time.time() + STARTUP_WAIT_TIMEOUT_SECONDS
+    while time.time() < deadline:
+        state, state_err = _read_runtime_state()
+        if state_err:
+            return JSONResponse({"error": str(state_err)}, status_code=500, headers=_no_cache_headers())
+        if state.get("status") == "failed":
+            return JSONResponse(
+                {"error": "App failed to start. Check run() logs in Modal."},
+                status_code=500,
+                headers=_no_cache_headers(),
+            )
+        if state.get("url") and _is_run_alive(state):
+            return RedirectResponse(url=state["url"], status_code=307, headers=_no_cache_headers())
+        time.sleep(1)
+
     return JSONResponse(
-        {"error": "Cloudflare URL not set. Is the tunnel running?"},
-        status_code=404
+        {
+            "error": "App is starting. Retry in a few seconds.",
+            "status": "starting",
+        },
+        status_code=202,
+        headers=_no_cache_headers(),
     )
 
 
@@ -282,13 +415,22 @@ def get_cf_url():
 def cf_url_json():
     """Get the Cloudflare URL as JSON"""
     from fastapi.responses import JSONResponse
-    
-    url, err = _read_cf_url()
+
+    state, err = _read_runtime_state()
     if err:
-        return JSONResponse({"error": str(err)}, status_code=500)
-    if url:
-        return JSONResponse({"url": url})
-    return JSONResponse({"error": "Not set"}, status_code=404)
+        return JSONResponse({"error": str(err)}, status_code=500, headers=_no_cache_headers())
+    if state.get("url") and _is_run_alive(state):
+        return JSONResponse(
+            {"url": state["url"], "status": state.get("status", "running")},
+            headers=_no_cache_headers(),
+        )
+    if state.get("url"):
+        cf_url_store.pop("url", None)
+    return JSONResponse(
+        {"error": "Not set", "status": state.get("status", "stopped")},
+        status_code=404,
+        headers=_no_cache_headers(),
+    )
 
 
 @app.local_entrypoint()
