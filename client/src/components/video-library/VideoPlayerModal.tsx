@@ -5,7 +5,7 @@ import type { Video } from "../../types";
 interface VideoPlayerModalProps {
   selectedVideo: Video | null;
   modalVisible: boolean;
-  videoRef: RefObject<HTMLVideoElement>;
+  videoRef: RefObject<HTMLVideoElement | null>;
   onClose: () => void;
 }
 

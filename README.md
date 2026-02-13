@@ -105,6 +105,7 @@ cd client && bun install && bun run dev
   - Parallel ffmpeg frame extraction across CPU cores
   - Real-time progress tracking (persists across page refresh)
   - Plyr preview thumbnails via WebVTT
+- [x] Processes modal for active background jobs (sprite extraction/tiling progress)
 - [x] Toast notification system
 - [x] File manager
 - [x] Web terminal

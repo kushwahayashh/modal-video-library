@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type MouseEvent as ReactMouseEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Link } from "react-router-dom";
 import { Search } from "lucide-react";
-// @ts-expect-error plyr types export both default and namespace which confuses bundler resolution
 import Plyr from "plyr";
 import "plyr/dist/plyr.css";
 import "./App.css";
@@ -12,6 +11,7 @@ import ContextMenu from "./components/video-library/ContextMenu";
 import VideoCard from "./components/video-library/VideoCard";
 import VideoPlayerModal from "./components/video-library/VideoPlayerModal";
 import VideoActionModal from "./components/video-library/VideoActionModal";
+import ProcessesModal from "./components/video-library/ProcessesModal";
 import { saveThumbnailToServer } from "./components/video-library/helpers";
 import type { ActionModalType, ContextMenuState, VideoProperties } from "./components/video-library/types";
 
@@ -36,7 +36,8 @@ function App() {
   const [renameValue, setRenameValue] = useState("");
   const [videoProps, setVideoProps] = useState<VideoProperties | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
-  const { pushToast: pushToastRaw, updateToast, removeToast } = useToast();
+  const [processesModalOpen, setProcessesModalOpen] = useState(false);
+  const { pushToast: pushToastRaw } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<Plyr | null>(null);
   const closeTimerRef = useRef<number | null>(null);
@@ -54,14 +55,18 @@ function App() {
     videoProps?.sampleRate
   );
 
-  const updateThumbnailOverride = useCallback((videoId: string, imageUrl: string) => {
-    setThumbnailOverrides((prev) => ({ ...prev, [videoId]: imageUrl }));
-    saveThumbnailToServer(videoId, imageUrl);
-  }, []);
-
   const pushToast = useCallback((message: string, variant: "error" | "success" = "error") => {
     pushToastRaw({ variant, message });
   }, [pushToastRaw]);
+
+  const updateThumbnailOverride = useCallback(async (videoId: string, imageUrl: string) => {
+    setThumbnailOverrides((prev) => ({ ...prev, [videoId]: imageUrl }));
+    try {
+      await saveThumbnailToServer(videoId, imageUrl);
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : "Failed to save thumbnail");
+    }
+  }, [pushToast]);
 
   useEffect(() => {
     let active = true;
@@ -154,6 +159,7 @@ function App() {
         const err = await res.json();
         throw new Error(err.error || "Failed to rename");
       }
+      pushToast(`Renamed: ${actionVideo.title}`, "success");
       closeActionModal();
       fetchVideos();
     } catch (e) {
@@ -171,6 +177,7 @@ function App() {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Failed to delete");
+      pushToast(`Deleted: ${actionVideo.title}`, "success");
       closeActionModal();
       fetchVideos();
     } catch {
@@ -208,40 +215,6 @@ function App() {
   }, [fetchVideos, pushToast]);
 
   const activeSpriteJobs = useSpriteProgress(handleSpriteJobSettled);
-  const spriteToastIds = useRef<Map<string, number>>(new Map());
-
-  useEffect(() => {
-    const currentVideoIds = new Set(activeSpriteJobs.map((j) => j.videoId));
-
-    for (const [videoId, toastId] of spriteToastIds.current) {
-      if (!currentVideoIds.has(videoId)) {
-        spriteToastIds.current.delete(videoId);
-        removeToast(toastId);
-      }
-    }
-
-    for (const job of activeSpriteJobs) {
-      const detail = job.status === "extracting"
-        ? `Extracting frames: ${job.current}/${job.total}`
-        : "Tiling sprite sheet...";
-      const progress = job.status === "extracting" && job.total > 0
-        ? Math.round((job.current / job.total) * 100)
-        : null;
-
-      const existingId = spriteToastIds.current.get(job.videoId);
-      if (existingId != null) {
-        updateToast(existingId, { detail, progress });
-      } else {
-        const id = pushToastRaw({
-          variant: "status",
-          title: job.title,
-          detail,
-          progress,
-        });
-        spriteToastIds.current.set(job.videoId, id);
-      }
-    }
-  }, [activeSpriteJobs, pushToastRaw, updateToast, removeToast]);
 
   const openModal = (video: Video) => {
     if (closeTimerRef.current !== null) {
@@ -309,7 +282,9 @@ function App() {
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (actionModal) {
+        if (processesModalOpen) {
+          setProcessesModalOpen(false);
+        } else if (actionModal) {
           closeActionModal();
         } else if (selectedVideo) {
           closeModal();
@@ -318,7 +293,7 @@ function App() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedVideo, closeModal, actionModal]);
+  }, [selectedVideo, closeModal, actionModal, processesModalOpen]);
 
   useEffect(() => {
     if (selectedVideo && videoRef.current && !playerRef.current) {
@@ -366,7 +341,7 @@ function App() {
     <div className="app">
       <nav className="nav">
         <div className="container nav-content">
-          <a className="nav-logo" href="/">
+          <a className="nav-logo" href="/cf">
             VIDEO<span>LIB</span>
           </a>
 
@@ -382,6 +357,12 @@ function App() {
           </div>
 
           <div className="nav-right">
+            <button className="nav-btn nav-process-btn" onClick={() => setProcessesModalOpen(true)}>
+              Processes
+              {activeSpriteJobs.length > 0 && (
+                <span className="nav-process-count">{activeSpriteJobs.length}</span>
+              )}
+            </button>
             <Link to="/manager" className="nav-btn">Manager</Link>
             <a href="/terminal" target="_blank" rel="noopener noreferrer" className="nav-btn">Terminal</a>
           </div>
@@ -454,9 +435,16 @@ function App() {
         selectedThumbnail={actionVideo ? thumbnailOverrides[actionVideo.id] : undefined}
         onThumbnailSelect={(image) => {
           if (!actionVideo) return;
-          updateThumbnailOverride(actionVideo.id, image);
+          void updateThumbnailOverride(actionVideo.id, image);
+          pushToast("Thumbnail updated", "success");
           closeActionModal();
         }}
+      />
+
+      <ProcessesModal
+        open={processesModalOpen}
+        jobs={activeSpriteJobs}
+        onClose={() => setProcessesModalOpen(false)}
       />
     </div>
   );

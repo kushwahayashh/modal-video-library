@@ -9,6 +9,7 @@ import { fileURLToPath } from "url";
 import { createThumbMapStore } from "./lib/thumb-map.js";
 import { createSpriteService } from "./lib/sprite-generation.js";
 import { fileExists, isPathSafe, formatBytes } from "./lib/files.js";
+import { parseRangeHeader } from "./lib/http-range.js";
 import {
   VIDEO_EXTENSIONS,
   VIDEO_MIME_TYPES,
@@ -39,6 +40,10 @@ const VIDEOS_DIR = path.join(DATA_DIR, "videos");
 const SPRITES_DIR = path.join(DATA_DIR, "sprites");
 const PLACEHOLDERS_DIR = path.join(__dirname, "../../images");
 const PLACEHOLDER_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
+const VIDEO_SCAN_CONCURRENCY = Math.max(
+  1,
+  Math.min(16, parseInt(process.env.VIDEO_SCAN_CONCURRENCY || "6", 10) || 6)
+);
 
 [VIDEOS_DIR, SPRITES_DIR].forEach((dir) => {
   if (!fs.existsSync(dir)) {
@@ -60,11 +65,30 @@ try {
   // Images folder might be missing; ignore
 }
 
-const { readThumbMap, writeThumbMap } = createThumbMapStore(DATA_DIR);
+const { readThumbMap, updateThumbMap } = createThumbMapStore(DATA_DIR);
 const { spriteJobs, runSpriteGeneration, isJobRunning } = createSpriteService({
   spritesDir: SPRITES_DIR,
   fileExists,
 });
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  if (items.length === 0) return [];
+  const results = new Array(items.length);
+  const workerCount = Math.min(concurrency, items.length);
+  let currentIndex = 0;
+
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const index = currentIndex;
+      currentIndex += 1;
+      if (index >= items.length) return;
+      results[index] = await mapper(items[index], index);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
 
 let cloudflareUrl = null;
 let lastActivityAt = Date.now();
@@ -130,9 +154,10 @@ app.post("/api/thumbnail-map", async (request, reply) => {
     return reply.status(400).send({ error: "videoId and imageUrl required" });
   }
 
-  const map = await readThumbMap();
-  map[videoId.trim()] = imageUrl.trim();
-  await writeThumbMap(map);
+  await updateThumbMap((map) => {
+    map[videoId.trim()] = imageUrl.trim();
+    return map;
+  });
   return { success: true };
 });
 
@@ -169,7 +194,7 @@ app.get("/api/videos", async () => {
     if (!(await fileExists(VIDEOS_DIR))) return { videos: [], total: 0 };
 
     const entries = await fsp.readdir(VIDEOS_DIR, { recursive: true });
-    const videos = (await Promise.all(entries.map(async (relPath) => {
+    const videos = (await mapWithConcurrency(entries, VIDEO_SCAN_CONCURRENCY, async (relPath) => {
       try {
         const ext = path.extname(relPath).toLowerCase();
         if (!VIDEO_EXTENSIONS.has(ext)) return null;
@@ -193,7 +218,7 @@ app.get("/api/videos", async () => {
       } catch {
         return null;
       }
-    }))).filter(Boolean);
+    })).filter(Boolean);
 
     videos.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     return { videos, total: videos.length };
@@ -290,12 +315,13 @@ app.post("/api/videos/:id/rename", async (request, reply) => {
     }
 
     if (newId !== id) {
-      const thumbMap = await readThumbMap();
-      if (thumbMap[id]) {
-        thumbMap[newId] = thumbMap[id];
-        delete thumbMap[id];
-        await writeThumbMap(thumbMap);
-      }
+      await updateThumbMap((thumbMap) => {
+        if (thumbMap[id]) {
+          thumbMap[newId] = thumbMap[id];
+          delete thumbMap[id];
+        }
+        return thumbMap;
+      });
     }
 
     return { success: true, id: newId, filename: newRelPath };
@@ -322,11 +348,12 @@ app.delete("/api/videos/:id", async (request, reply) => {
       await fsp.rm(spriteDir, { recursive: true, force: true });
     }
 
-    const thumbMap = await readThumbMap();
-    if (thumbMap[id]) {
-      delete thumbMap[id];
-      await writeThumbMap(thumbMap);
-    }
+    await updateThumbMap((thumbMap) => {
+      if (thumbMap[id]) {
+        delete thumbMap[id];
+      }
+      return thumbMap;
+    });
 
     spriteJobs.delete(id);
 
@@ -416,9 +443,14 @@ app.get("/api/stream/:id", async (request, reply) => {
   const range = request.headers.range;
 
   if (range) {
-    const parts = range.replace(/bytes=/, "").split("-");
-    const start = parseInt(parts[0], 10);
-    const end = parts[1] ? parseInt(parts[1], 10) : stats.size - 1;
+    const parsedRange = parseRangeHeader(range, stats.size);
+    if (!parsedRange) {
+      return reply.status(416).headers({
+        "Content-Range": `bytes */${stats.size}`,
+        "Accept-Ranges": "bytes",
+      }).send({ error: "Invalid Range header" });
+    }
+    const { start, end } = parsedRange;
     const chunkSize = end - start + 1;
 
     reply.status(206).headers({
