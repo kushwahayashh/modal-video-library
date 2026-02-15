@@ -128,11 +128,17 @@
   }, minDelay);
 
   function doRedirect(url) {
-    if (animationDone) {
-      window.location.href = url;
-    } else {
-      tunnelUrl = url;
-    }
+    fetch(url + "/api/health", { mode: "no-cors", cache: "no-store" })
+      .then(function() {
+        if (animationDone) {
+          window.location.href = url;
+        } else {
+          tunnelUrl = url;
+        }
+      })
+      .catch(function() {
+        setTimeout(function() { doRedirect(url); }, 2000);
+      });
   }
 
   // If we already have a tunnel URL, verify it via the poll endpoint first
