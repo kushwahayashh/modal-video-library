@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600&display=swap" media="print" onload="this.media='all'">
 <title>Redirecting...</title>
 <style>
 
@@ -114,67 +114,95 @@
 <script>
 (function() {
   var pollUrl = "{{POLL_URL}}";
-  var hardcodedUrl = "{{TUNNEL_URL}}";
   var attempts = 0;
-  var maxAttempts = 60;
 
   var tunnelUrl = null;
+  var redirected = false;
   var animationDone = false;
   var minDelay = 3000;
+  var subtitleEl = document.getElementById("sub");
 
   setTimeout(function() {
     animationDone = true;
-    if (tunnelUrl) window.location.href = tunnelUrl;
+    if (tunnelUrl) verifyAndRedirect(tunnelUrl);
   }, minDelay);
 
-  function doRedirect(url) {
-    fetch(url + "/api/health", { mode: "no-cors", cache: "no-store" })
+  function addDnsPrefetch(url) {
+    try {
+      var a = document.createElement("a");
+      a.href = url;
+      var link = document.createElement("link");
+      link.rel = "dns-prefetch";
+      link.href = "//" + a.hostname;
+      document.head.appendChild(link);
+      var preconnect = document.createElement("link");
+      preconnect.rel = "preconnect";
+      preconnect.href = a.protocol + "//" + a.hostname;
+      document.head.appendChild(preconnect);
+    } catch(e) {}
+  }
+
+  var prefetched = false;
+
+  function queueRedirect(url) {
+    if (!url) return;
+    tunnelUrl = url;
+    if (!prefetched) { prefetched = true; addDnsPrefetch(url); }
+    if (animationDone) verifyAndRedirect(url);
+  }
+
+  function verifyAndRedirect(url, retries) {
+    if (redirected) return;
+    retries = retries || 0;
+    if (subtitleEl) subtitleEl.textContent = "Verifying tunnel is reachable...";
+    fetch(url, { mode: "no-cors", cache: "no-store" })
       .then(function() {
-        if (animationDone) {
-          window.location.href = url;
-        } else {
-          tunnelUrl = url;
-        }
+        redirectNow(url);
       })
       .catch(function() {
-        setTimeout(function() { doRedirect(url); }, 2000);
+        if (retries < 15) {
+          setTimeout(function() { verifyAndRedirect(url, retries + 1); }, 2000);
+        } else {
+          redirectNow(url);
+        }
       });
   }
 
-  // If we already have a tunnel URL, verify it via the poll endpoint first
-  // (no-cors fetch is unreliable — opaque responses always resolve)
-  if (hardcodedUrl && pollUrl) {
-    fetch(pollUrl, { cache: "no-store" })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (data.url && data.status === "running") {
-          doRedirect(data.url);
-        } else {
-          poll();
-        }
-      })
-      .catch(function() { poll(); });
-  } else {
-    poll();
+  function redirectNow(url) {
+    if (redirected) return;
+    redirected = true;
+    if (subtitleEl) subtitleEl.textContent = "Tunnel ready. Redirecting...";
+    window.location.replace(url);
   }
 
   function poll() {
-    attempts++;
-    if (attempts > 10) document.getElementById("sub").textContent = "Taking a moment longer than usual\u2026";
+    if (!pollUrl) {
+      if (subtitleEl) subtitleEl.textContent = "Waiting for launch endpoint...";
+      setTimeout(poll, 2000);
+      return;
+    }
 
-    fetch(pollUrl, { cache: "no-store" })
+    attempts++;
+    if (attempts > 10 && subtitleEl) {
+      subtitleEl.textContent = "Taking a moment longer than usual...";
+    }
+
+    var separator = pollUrl.indexOf("?") === -1 ? "?" : "&";
+    fetch(pollUrl + separator + "ts=" + Date.now(), { cache: "no-store" })
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.url && data.status === "running") {
-          doRedirect(data.url);
+          queueRedirect(data.url);
         } else {
-          if (attempts < maxAttempts) setTimeout(poll, 2000);
+          setTimeout(poll, 2000);
         }
       })
       .catch(function() {
-        if (attempts < maxAttempts) setTimeout(poll, 2000);
+        setTimeout(poll, 2000);
       });
   }
+
+  poll();
 })();
 </script>
 </body>

@@ -9,5 +9,6 @@ export function formatBytes(bytes: number): string {
 export function formatDate(dateStr: string | Date | null | undefined): string {
   if (!dateStr) return "-";
   const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }

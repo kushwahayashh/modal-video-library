@@ -9,7 +9,7 @@
 
 ## Runtime Topology
 - Browser talks to backend via:
-  - HTTP for metadata, file operations, streaming, sprites, and placeholder images.
+  - HTTP for metadata, streaming, sprites, and placeholder images.
   - WebSocket for interactive terminal I/O.
 - Backend serves built frontend (`client/dist`) when present.
 - Backend reads/writes media data under `DATA_DIR` (default `/data`).
@@ -24,7 +24,6 @@
 
 ## Identifier and Path Strategy
 - Video IDs are base64url-encoded relative paths (e.g., `subfolder/video.mp4` for nested files).
-- All file-manager operations are validated via `isPathSafe()` against `DATA_DIR`.
 - Sprite output paths are keyed by video ID.
 
 ## Core Flows
@@ -45,11 +44,6 @@
 2. Backend launches async ffmpeg pipeline with progress tracked in-memory map.
 3. Frontend polls `/api/sprites/progress` each second.
 4. Backend publishes `sprite.jpg` and `sprite.vtt` under `/data/sprites/:id/`.
-
-### File Manager
-1. Frontend calls `/api/files?path=...`.
-2. Backend returns folder and file metadata sorted with folders first.
-3. Rename and delete actions call `/api/files/rename` and `/api/files/*`.
 
 ### Terminal
 1. Browser opens `/terminal` and connects to `/ws/terminal`.

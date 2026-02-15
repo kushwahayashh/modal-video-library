@@ -23,7 +23,6 @@ A self-hosted video library app that runs locally or on Modal with a Cloudflare 
     ├── package.json
     └── src/
         ├── App.tsx
-        ├── FileManager.tsx
         ├── types.ts
         ├── utils.ts
         ├── hooks/
@@ -107,7 +106,6 @@ cd client && bun install && bun run dev
   - Plyr preview thumbnails via WebVTT
 - [x] Processes modal for active background jobs (sprite extraction/tiling progress)
 - [x] Toast notification system
-- [x] File manager
 - [x] Web terminal
 - [ ] Video downloading (yt-dlp, aria2c)
 - [x] Metadata extraction (video properties modal)

@@ -91,19 +91,6 @@
 - Supports `Range` requests for progressive playback.
 - MIME inferred from file extension.
 
-## File Manager
-
-### `GET /api/files?path=<relativePath>`
-- Lists files in resolved `DATA_DIR/path`.
-- Returns array of `{ name, path, size, isFolder, modified }`.
-
-### `POST /api/files/rename`
-- Body: `{ oldPath, newPath }`.
-- Path safety checked for both paths.
-
-### `DELETE /api/files/*`
-- Deletes file/folder recursively from validated path.
-
 ## WebSocket Terminal
 
 ### `GET /ws/terminal` (WebSocket upgrade)

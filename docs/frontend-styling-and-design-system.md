@@ -19,11 +19,6 @@
   - Action modals (rename/delete/properties/thumbnail picker).
   - Sprite progress toast.
   - Responsive breakpoints.
-- `client/src/FileManager.css`
-  - Header and breadcrumb toolbar.
-  - File grid/list row layout.
-  - Action buttons and modal styles.
-  - Small-screen two-column fallback.
 
 ## Styling Constraints in Current Codebase
 - Neutral/dark monochrome visual language.
@@ -35,7 +30,6 @@
 
 ## Note on Consistency
 - `server/src/terminal.html` mirrors main token set closely.
-- `server/src/manager.html` has its own embedded token set and uses Space Mono instead of Space Grotesk.
 
 ## Toast Notifications
 - Toast styles are in `client/src/components/ToastStack.css`.

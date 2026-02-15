@@ -10,12 +10,11 @@ This folder documents the full codebase for development, operations, and future 
 ## Backend
 - `docs/backend-overview.md`: backend structure, lifecycle, helpers, and operational behavior.
 - `docs/backend-api.md`: complete HTTP and WebSocket API reference.
-- `docs/backend-terminal-and-manager-html.md`: standalone HTML tool UIs and how they connect to backend routes.
+- `docs/backend-terminal-html.md`: standalone terminal HTML UI and how it connects to backend routes.
 
 ## Frontend
 - `docs/frontend-overview.md`: frontend runtime, routing, and source map.
 - `docs/frontend-video-library-page.md`: detailed behavior of `client/src/App.tsx`.
-- `docs/frontend-file-manager-page.md`: detailed behavior of `client/src/FileManager.tsx`.
 - `docs/frontend-styling-and-design-system.md`: CSS variables, design rules, and styling file responsibilities.
 
 ## Deployment and Data

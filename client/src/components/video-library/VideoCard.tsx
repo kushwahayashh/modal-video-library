@@ -39,7 +39,9 @@ export default function VideoCard({
     return () => observer.disconnect();
   }, []);
 
-  const fallbackPlaceholder = getStablePlaceholder(video.id, placeholderImages);
+  const stablePlaceholderKey =
+    `${video.addedAt || video.createdAt || ""}|${video.sizeBytes || 0}|${video.duration || ""}`;
+  const fallbackPlaceholder = getStablePlaceholder(stablePlaceholderKey, placeholderImages);
   const imgSrc = thumbnailOverrides[video.id] || video.thumbnail || fallbackPlaceholder;
 
   useEffect(() => {

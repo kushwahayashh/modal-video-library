@@ -61,6 +61,10 @@ test("video rename moves thumbnail-map key and sprite metadata", async () => {
     path.join(dataDir, "thumbnail-map.json"),
     JSON.stringify({ [oldId]: "/api/placeholder-images/alpha.jpeg" })
   );
+  await writeFile(
+    path.join(dataDir, "video-added-map.json"),
+    JSON.stringify({ [oldId]: "2026-02-01T10:00:00.000Z" })
+  );
 
   const renameRes = await app.inject({
     method: "POST",
@@ -85,6 +89,10 @@ test("video rename moves thumbnail-map key and sprite metadata", async () => {
   const thumbMap = JSON.parse(await readFile(path.join(dataDir, "thumbnail-map.json"), "utf-8"));
   assert.equal(thumbMap[oldId], undefined);
   assert.equal(thumbMap[newId], "/api/placeholder-images/alpha.jpeg");
+
+  const addedMap = JSON.parse(await readFile(path.join(dataDir, "video-added-map.json"), "utf-8"));
+  assert.equal(addedMap[oldId], undefined);
+  assert.equal(addedMap[newId], "2026-02-01T10:00:00.000Z");
 });
 
 test("video delete removes thumbnail-map entry and sprite directory", async () => {
@@ -111,6 +119,7 @@ test("video delete removes thumbnail-map entry and sprite directory", async () =
   }
   currentThumbMap[id] = "/api/placeholder-images/gamma.jpeg";
   await writeFile(path.join(dataDir, "thumbnail-map.json"), JSON.stringify(currentThumbMap));
+  await writeFile(path.join(dataDir, "video-added-map.json"), JSON.stringify({ [id]: "2026-02-01T10:00:00.000Z" }));
 
   const deleteRes = await app.inject({
     method: "DELETE",
@@ -124,4 +133,7 @@ test("video delete removes thumbnail-map entry and sprite directory", async () =
 
   const thumbMapAfterDelete = JSON.parse(await readFile(path.join(dataDir, "thumbnail-map.json"), "utf-8"));
   assert.equal(thumbMapAfterDelete[id], undefined);
+
+  const addedMapAfterDelete = JSON.parse(await readFile(path.join(dataDir, "video-added-map.json"), "utf-8"));
+  assert.equal(addedMapAfterDelete[id], undefined);
 });

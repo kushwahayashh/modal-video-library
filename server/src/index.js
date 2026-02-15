@@ -7,8 +7,9 @@ import fs from "fs";
 import { promises as fsp } from "fs";
 import { fileURLToPath } from "url";
 import { createThumbMapStore } from "./lib/thumb-map.js";
+import { createVideoAddedMapStore } from "./lib/video-added-map.js";
 import { createSpriteService } from "./lib/sprite-generation.js";
-import { fileExists, isPathSafe, formatBytes } from "./lib/files.js";
+import { fileExists, formatBytes } from "./lib/files.js";
 import { parseRangeHeader } from "./lib/http-range.js";
 import {
   VIDEO_EXTENSIONS,
@@ -66,10 +67,26 @@ try {
 }
 
 const { readThumbMap, updateThumbMap } = createThumbMapStore(DATA_DIR);
+const { readVideoAddedMap, updateVideoAddedMap } = createVideoAddedMapStore(DATA_DIR);
 const { spriteJobs, runSpriteGeneration, isJobRunning } = createSpriteService({
   spritesDir: SPRITES_DIR,
   fileExists,
 });
+
+function normalizeIsoTimestamp(value) {
+  if (typeof value !== "string") return null;
+  const ms = Date.parse(value);
+  if (!Number.isFinite(ms)) return null;
+  return new Date(ms).toISOString();
+}
+
+function fallbackAddedAt(stat) {
+  const candidates = [stat.ctimeMs, stat.birthtimeMs, stat.mtimeMs].filter(
+    (ms) => Number.isFinite(ms) && ms > 0
+  );
+  const ts = candidates.length > 0 ? candidates[0] : Date.now();
+  return new Date(ts).toISOString();
+}
 
 async function mapWithConcurrency(items, concurrency, mapper) {
   if (items.length === 0) return [];
@@ -193,6 +210,10 @@ app.get("/api/videos", async () => {
   try {
     if (!(await fileExists(VIDEOS_DIR))) return { videos: [], total: 0 };
 
+    const currentAddedMap = await readVideoAddedMap();
+    const nextAddedMap = {};
+    let addedMapChanged = false;
+
     const entries = await fsp.readdir(VIDEOS_DIR, { recursive: true });
     const videos = (await mapWithConcurrency(entries, VIDEO_SCAN_CONCURRENCY, async (relPath) => {
       try {
@@ -204,6 +225,12 @@ app.get("/api/videos", async () => {
         const duration = await getVideoDuration(filePath);
         const normalizedPath = relPath.split(path.sep).join("/");
         const videoId = toBase64Url(normalizedPath);
+        const storedAddedAt = normalizeIsoTimestamp(currentAddedMap[videoId]);
+        const addedAt = storedAddedAt || fallbackAddedAt(stat);
+        nextAddedMap[videoId] = addedAt;
+        if (storedAddedAt !== addedAt) {
+          addedMapChanged = true;
+        }
         return {
           id: videoId,
           title: path.basename(relPath, ext),
@@ -211,6 +238,7 @@ app.get("/api/videos", async () => {
           size: formatBytes(stat.size),
           sizeBytes: stat.size,
           createdAt: stat.birthtime,
+          addedAt,
           thumbnail: null,
           duration,
           hasSprites: fs.existsSync(path.join(SPRITES_DIR, videoId, "sprite.jpg")),
@@ -220,7 +248,14 @@ app.get("/api/videos", async () => {
       }
     })).filter(Boolean);
 
-    videos.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    if (Object.keys(currentAddedMap).length !== Object.keys(nextAddedMap).length) {
+      addedMapChanged = true;
+    }
+    if (addedMapChanged) {
+      await updateVideoAddedMap(() => nextAddedMap);
+    }
+
+    videos.sort((a, b) => new Date(b.addedAt) - new Date(a.addedAt));
     return { videos, total: videos.length };
   } catch (e) {
     console.error("Error reading videos:", e);
@@ -251,6 +286,7 @@ app.get("/api/videos/:id", async (request, reply) => {
     size: formatBytes(stats.size),
     sizeBytes: stats.size,
     createdAt: stats.birthtime,
+    addedAt: stats.ctime,
     modifiedAt: stats.mtime,
     duration,
     ...metadata,
@@ -315,6 +351,14 @@ app.post("/api/videos/:id/rename", async (request, reply) => {
     }
 
     if (newId !== id) {
+      await updateVideoAddedMap((addedMap) => {
+        if (addedMap[id]) {
+          addedMap[newId] = addedMap[id];
+          delete addedMap[id];
+        }
+        return addedMap;
+      });
+
       await updateThumbMap((thumbMap) => {
         if (thumbMap[id]) {
           thumbMap[newId] = thumbMap[id];
@@ -353,6 +397,13 @@ app.delete("/api/videos/:id", async (request, reply) => {
         delete thumbMap[id];
       }
       return thumbMap;
+    });
+
+    await updateVideoAddedMap((addedMap) => {
+      if (addedMap[id]) {
+        delete addedMap[id];
+      }
+      return addedMap;
     });
 
     spriteJobs.delete(id);
@@ -470,92 +521,6 @@ app.get("/api/stream/:id", async (request, reply) => {
   });
 
   return fs.createReadStream(filePath);
-});
-
-app.get("/api/files", async (request, reply) => {
-  const subPath = request.query.path || "";
-
-  if (!isPathSafe(DATA_DIR, subPath)) {
-    return reply.status(403).send({ error: "Access denied" });
-  }
-
-  const targetDir = path.resolve(DATA_DIR, subPath);
-  if (!(await fileExists(targetDir))) {
-    return reply.status(404).send({ error: "Directory not found" });
-  }
-
-  try {
-    const entries = await fsp.readdir(targetDir, { withFileTypes: true });
-    const items = await Promise.all(entries.map(async (entry) => {
-      const fullPath = path.join(targetDir, entry.name);
-      const stats = await fsp.stat(fullPath);
-      const relativePath = path.relative(DATA_DIR, fullPath);
-      return {
-        name: entry.name,
-        path: relativePath,
-        size: entry.isDirectory() ? 0 : stats.size,
-        isFolder: entry.isDirectory(),
-        modified: stats.mtime,
-      };
-    }));
-
-    items.sort((a, b) => {
-      if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-
-    return items;
-  } catch (e) {
-    console.error("Error listing files:", e);
-    return reply.status(500).send({ error: "Failed to list files" });
-  }
-});
-
-app.post("/api/files/rename", async (request, reply) => {
-  const { oldPath, newPath } = request.body;
-
-  if (!oldPath || !newPath) {
-    return reply.status(400).send({ error: "oldPath and newPath are required" });
-  }
-  if (!isPathSafe(DATA_DIR, oldPath) || !isPathSafe(DATA_DIR, newPath)) {
-    return reply.status(403).send({ error: "Access denied" });
-  }
-
-  const oldFullPath = path.resolve(DATA_DIR, oldPath);
-  const newFullPath = path.resolve(DATA_DIR, newPath);
-
-  if (!(await fileExists(oldFullPath))) {
-    return reply.status(404).send({ error: "File or folder not found" });
-  }
-
-  try {
-    await fsp.rename(oldFullPath, newFullPath);
-    return { success: true };
-  } catch (e) {
-    console.error("Error renaming:", e);
-    return reply.status(500).send({ error: "Failed to rename" });
-  }
-});
-
-app.delete("/api/files/*", async (request, reply) => {
-  const targetPath = request.params["*"];
-
-  if (!isPathSafe(DATA_DIR, targetPath)) {
-    return reply.status(403).send({ error: "Access denied" });
-  }
-
-  const fullPath = path.resolve(DATA_DIR, targetPath);
-  if (!(await fileExists(fullPath))) {
-    return reply.status(404).send({ error: "File or folder not found" });
-  }
-
-  try {
-    await fsp.rm(fullPath, { recursive: true });
-    return { success: true };
-  } catch (e) {
-    console.error("Error deleting:", e);
-    return reply.status(500).send({ error: "Failed to delete" });
-  }
 });
 
 app.get("/ws/terminal", { websocket: true }, (socket) => {

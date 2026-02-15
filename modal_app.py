@@ -15,7 +15,6 @@ IDLE_TIMEOUT_SECONDS = 4 * 60 * 60
 IDLE_POLL_INTERVAL_SECONDS = 60
 RUN_HEARTBEAT_TTL_SECONDS = 15
 START_LOCK_TTL_SECONDS = 20 * 60
-STARTUP_WAIT_TIMEOUT_SECONDS = 120
 
 
 image = (
@@ -120,15 +119,18 @@ def _load_redirect_template():
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "redirect.html"),
         "/app/redirect.html",
     ]:
-        if os.path.exists(p):
-            return open(p).read()
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                return f.read()
+        except FileNotFoundError:
+            continue
     raise FileNotFoundError("redirect.html not found")
 
 
 _REDIRECT_TEMPLATE = _load_redirect_template()
 
 
-def _tunnel_redirect_page(tunnel_url: str, poll_url: str = ""):
+def _tunnel_redirect_page(tunnel_url: str, poll_url: str):
     from fastapi.responses import HTMLResponse
 
     html = _REDIRECT_TEMPLATE.replace("{{TUNNEL_URL}}", tunnel_url).replace("{{POLL_URL}}", poll_url)
@@ -143,7 +145,6 @@ def _tunnel_redirect_page(tunnel_url: str, poll_url: str = ""):
 def run():
     import re
     import threading
-    import time
     import urllib.request
     import json
 
@@ -378,13 +379,13 @@ def run():
 
 @app.function()
 @modal.fastapi_endpoint(method="GET")
-def launch(format: str = ""):
+def launch(fmt: str = ""):
     """Auto-start run() if needed, then redirect to the Cloudflare tunnel URL.
-    Append ?format=json to poll status without the HTML page."""
+    Append ?fmt=json to poll status without the HTML page."""
     from fastapi.responses import JSONResponse
 
-    poll_url = launch.web_url + "?format=json"
-    wants_json = format.lower() == "json"
+    poll_url = launch.web_url + "?fmt=json"
+    wants_json = fmt.lower() == "json"
 
     state, err = _read_runtime_state()
     if err:
@@ -407,12 +408,9 @@ def launch(format: str = ""):
     if state.get("status") == "failed" and not _is_run_alive(state, now_ts):
         cf_url_store.pop("launching", None)
 
-    should_spawn = True
     launch_ts = state.get("launching")
-    if isinstance(launch_ts, (int, float)) and (now_ts - launch_ts) < START_LOCK_TTL_SECONDS:
-        should_spawn = False
-    if _is_run_alive(state, now_ts):
-        should_spawn = False
+    launch_lock_active = isinstance(launch_ts, (int, float)) and (now_ts - launch_ts) < START_LOCK_TTL_SECONDS
+    should_spawn = not launch_lock_active and not _is_run_alive(state, now_ts)
 
     if should_spawn:
         cf_url_store["launching"] = now_ts

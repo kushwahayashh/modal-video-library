@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback, useMemo, type MouseEvent as ReactMouseEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Link } from "react-router-dom";
 import { Search } from "lucide-react";
 import Plyr from "plyr";
 import "plyr/dist/plyr.css";
@@ -59,6 +58,19 @@ function App() {
     pushToastRaw({ variant, message });
   }, [pushToastRaw]);
 
+  const getApiErrorMessage = useCallback((payload: unknown, fallback: string) => {
+    if (
+      payload &&
+      typeof payload === "object" &&
+      "error" in payload &&
+      typeof (payload as { error?: unknown }).error === "string" &&
+      (payload as { error: string }).error.trim()
+    ) {
+      return (payload as { error: string }).error.trim();
+    }
+    return fallback;
+  }, []);
+
   const updateThumbnailOverride = useCallback(async (videoId: string, imageUrl: string) => {
     setThumbnailOverrides((prev) => ({ ...prev, [videoId]: imageUrl }));
     try {
@@ -104,13 +116,17 @@ function App() {
       });
   }, []);
 
-  const openContextMenu = (e: ReactMouseEvent, video: Video) => {
+  const openContextMenuAt = useCallback((video: Video, x: number, y: number) => {
     setContextMenu({
       visible: true,
-      x: e.clientX,
-      y: e.clientY,
+      x,
+      y,
       video,
     });
+  }, []);
+
+  const openContextMenu = (e: ReactMouseEvent, video: Video) => {
+    openContextMenuAt(video, e.clientX, e.clientY);
   };
 
   const closeContextMenu = useCallback(() => {
@@ -126,7 +142,10 @@ function App() {
     } else if (type === "properties") {
       setVideoProps(null);
       fetch(`/api/videos/${video.id}`)
-        .then((r) => r.json())
+        .then((r) => {
+          if (!r.ok) throw new Error("Failed to load properties");
+          return r.json();
+        })
         .then((data) => setVideoProps(data))
         .catch(() => setVideoProps(video));
     }
@@ -155,9 +174,32 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ newName: renameValue.trim() }),
       });
+      let payload: unknown = null;
+      try {
+        payload = await res.json();
+      } catch {
+        payload = null;
+      }
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed to rename");
+        throw new Error(getApiErrorMessage(payload, "Failed to rename"));
+      }
+      let newVideoId = actionVideo.id;
+      if (
+        payload &&
+        typeof payload === "object" &&
+        "id" in payload &&
+        typeof (payload as { id?: unknown }).id === "string" &&
+        (payload as { id: string }).id.trim()
+      ) {
+        newVideoId = (payload as { id: string }).id.trim();
+      }
+      if (newVideoId !== actionVideo.id) {
+        setThumbnailOverrides((prev) => {
+          const currentThumb = prev[actionVideo.id];
+          if (!currentThumb) return prev;
+          if (prev[newVideoId] === currentThumb) return prev;
+          return { ...prev, [newVideoId]: currentThumb };
+        });
       }
       pushToast(`Renamed: ${actionVideo.title}`, "success");
       closeActionModal();
@@ -167,7 +209,7 @@ function App() {
     } finally {
       setActionLoading(false);
     }
-  }, [renameValue, actionVideo, pushToast, fetchVideos]);
+  }, [renameValue, actionVideo, pushToast, fetchVideos, getApiErrorMessage]);
 
   const confirmDelete = useCallback(async () => {
     if (!actionVideo) return;
@@ -195,15 +237,20 @@ function App() {
   const generateSprites = useCallback(async (video: Video) => {
     try {
       const res = await fetch(`/api/videos/${video.id}/sprites`, { method: "POST" });
+      let payload: unknown = null;
+      try {
+        payload = await res.json();
+      } catch {
+        payload = null;
+      }
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed to generate sprites");
+        throw new Error(getApiErrorMessage(payload, "Failed to generate sprites"));
       }
       pushToast(`Sprite generation started: ${video.title}`, "success");
     } catch (e) {
       pushToast(e instanceof Error ? e.message : "Failed to generate sprites");
     }
-  }, [pushToast]);
+  }, [pushToast, getApiErrorMessage]);
 
   const handleSpriteJobSettled = useCallback((job: SpriteProgressJob) => {
     if (job.status === "error") {
@@ -275,7 +322,13 @@ function App() {
 
   const normalizedSearch = search.trim().toLowerCase();
   const filteredVideos = useMemo(
-    () => videos.filter((v) => v.title.toLowerCase().includes(normalizedSearch)),
+    () =>
+      videos
+        .filter((v) => v.title.toLowerCase().includes(normalizedSearch))
+        .sort(
+          (a, b) =>
+            new Date(b.addedAt || b.createdAt).getTime() - new Date(a.addedAt || a.createdAt).getTime()
+        ),
     [videos, normalizedSearch]
   );
 
@@ -363,7 +416,6 @@ function App() {
                 <span className="nav-process-count">{activeSpriteJobs.length}</span>
               )}
             </button>
-            <Link to="/manager" className="nav-btn">Manager</Link>
             <a href="/terminal" target="_blank" rel="noopener noreferrer" className="nav-btn">Terminal</a>
           </div>
         </div>
@@ -397,6 +449,7 @@ function App() {
                   video={video}
                   onClick={() => openModal(video)}
                   onContextMenu={openContextMenu}
+                  onMenuClick={(videoItem, position) => openContextMenuAt(videoItem, position.x, position.y)}
                   placeholderImages={placeholderImages}
                   thumbnailOverrides={thumbnailOverrides}
                 />

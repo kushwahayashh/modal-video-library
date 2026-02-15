@@ -4,7 +4,6 @@
 - Server entrypoint: `server/src/index.js`
 - Package metadata: `server/package.json`
 - Standalone terminal UI: `server/src/terminal.html`
-- Standalone manager UI: `server/src/manager.html`
 
 ## Boot Sequence (`server/src/index.js`)
 1. Creates Fastify app with CORS and WebSocket plugins.
@@ -24,7 +23,6 @@
 - `getVideoDuration()`: ffprobe duration extraction with path+mtime cache and bounded LRU-style eviction.
 - `getVideoMetadata()`: ffprobe stream/format metadata extraction.
 - `formatBytes()`, `formatBitrate()`, `formatChannels()`: backend formatting helpers.
-- `isPathSafe()`: path traversal guard for file-manager operations.
 
 ## Sprite Pipeline
 - Job state stored in `spriteJobs` map keyed by video ID.
@@ -44,7 +42,6 @@
   - Download mode with `Content-Disposition`.
   - HTTP byte-range partial content for playback.
 - Video rename/delete routes also maintain sprite assets and thumbnail-map consistency.
-- File manager allows recursive delete via `fsp.rm(..., { recursive: true })` on validated paths.
 
 ## Terminal WebSocket Backend
 - Route: `/ws/terminal`.

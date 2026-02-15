@@ -16,7 +16,6 @@ This catalog covers all tracked repository files (excluding generated folders li
 - `server/package-lock.json`: backend dependency lockfile.
 - `server/src/index.js`: main Fastify server with API + WS routes.
 - `server/src/terminal.html`: standalone terminal client for `/terminal`.
-- `server/src/manager.html`: standalone file-manager utility page.
 - `server/tests/thumbnail-map.contract.test.js`: contract tests for `GET/POST /api/thumbnail-map` using Fastify inject.
 - `server/tests/video-rename-delete.contract.test.js`: contract tests for rename/delete side-effects on sprite and thumbnail metadata.
 
@@ -34,8 +33,6 @@ This catalog covers all tracked repository files (excluding generated folders li
 - `client/src/main.tsx`: React bootstrap and route registration.
 - `client/src/App.tsx`: video library page logic.
 - `client/src/App.css`: video library styling.
-- `client/src/FileManager.tsx`: React file manager page.
-- `client/src/FileManager.css`: file manager styling.
 - `client/src/components/ThumbnailPicker.tsx`: thumbnail selection component with loading skeletons.
 - `client/src/components/ToastProvider.tsx`: global toast context provider and hook.
 - `client/src/components/ToastStack.tsx`: toast notification stack renderer.
@@ -81,11 +78,10 @@ This catalog covers all tracked repository files (excluding generated folders li
 - `docs/runtime-and-operations.md`: runbook and environment behavior.
 - `docs/backend-overview.md`: backend internals overview.
 - `docs/backend-api.md`: route and payload reference.
-- `docs/backend-terminal-and-manager-html.md`: standalone HTML tool behavior.
+- `docs/backend-terminal-html.md`: standalone terminal HTML behavior.
 - `docs/file-catalog.md`: complete repository file inventory.
 - `docs/frontend-overview.md`: frontend architecture summary.
 - `docs/frontend-video-library-page.md`: `App.tsx` detailed behavior.
-- `docs/frontend-file-manager-page.md`: `FileManager.tsx` detailed behavior.
 - `docs/frontend-styling-and-design-system.md`: design token and CSS file guide.
 - `docs/deployment-modal.md`: Modal deployment/runtime details.
 - `docs/assets-and-images.md`: image asset behavior and inventory.

@@ -1,8 +1,8 @@
-export function getStablePlaceholder(videoId: string, placeholders: string[]): string | null {
+export function getStablePlaceholder(stableKey: string, placeholders: string[]): string | null {
   if (placeholders.length === 0) return null;
   let hash = 0;
-  for (let i = 0; i < videoId.length; i += 1) {
-    hash = (hash * 31 + videoId.charCodeAt(i)) >>> 0;
+  for (let i = 0; i < stableKey.length; i += 1) {
+    hash = (hash * 31 + stableKey.charCodeAt(i)) >>> 0;
   }
   return placeholders[hash % placeholders.length] || null;
 }
