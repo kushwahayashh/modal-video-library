@@ -66,6 +66,7 @@ image = (
         "cd /app/server && bun install",
         "cd /app/client && bun install",
     )
+    .add_local_file("redirect.html", "/app/redirect.html", copy=True)
     # Add source code (changes here won't re-run npm install)
     .add_local_dir("server/src", remote_path="/app/server/src")
     .add_local_dir("client/src", remote_path="/app/client/src")
@@ -98,12 +99,40 @@ def _is_run_alive(state, now_ts=None):
     return (now_ts - heartbeat) <= RUN_HEARTBEAT_TTL_SECONDS
 
 
+def _has_live_url(state, now_ts=None):
+    return bool(state.get("url")) and _is_run_alive(state, now_ts)
+
+
+def _is_redirect_ready(state, now_ts=None):
+    return _has_live_url(state, now_ts) and state.get("status") == "running"
+
+
 def _no_cache_headers():
     return {
         "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
         "Pragma": "no-cache",
         "Expires": "0",
     }
+
+
+def _load_redirect_template():
+    for p in [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "redirect.html"),
+        "/app/redirect.html",
+    ]:
+        if os.path.exists(p):
+            return open(p).read()
+    raise FileNotFoundError("redirect.html not found")
+
+
+_REDIRECT_TEMPLATE = _load_redirect_template()
+
+
+def _tunnel_redirect_page(tunnel_url: str, poll_url: str = ""):
+    from fastapi.responses import HTMLResponse
+
+    html = _REDIRECT_TEMPLATE.replace("{{TUNNEL_URL}}", tunnel_url).replace("{{POLL_URL}}", poll_url)
+    return HTMLResponse(content=html, headers=_no_cache_headers())
 
 
 @app.function(
@@ -349,23 +378,45 @@ def run():
 
 @app.function()
 @modal.fastapi_endpoint(method="GET")
-def get_cf_url():
+def get_cf_url(request=None):
     """Auto-start run() if needed, then redirect to the Cloudflare tunnel URL."""
-    from fastapi.responses import RedirectResponse, JSONResponse
+    from fastapi.responses import JSONResponse
+
+    poll_url = cf_url_json.web_url
+    accept_header = ((request.headers.get("accept") if request else "") or "").lower()
+    format_qs = (request.query_params.get("format") if request else "") or ""
+    wants_json = format_qs.lower() == "json" or (
+        "application/json" in accept_header and "text/html" not in accept_header
+    )
 
     state, err = _read_runtime_state()
     if err:
         return JSONResponse({"error": str(err)}, status_code=500, headers=_no_cache_headers())
 
     now_ts = time.time()
-    if state.get("url") and _is_run_alive(state, now_ts):
-        return RedirectResponse(url=state["url"], status_code=307, headers=_no_cache_headers())
-    if state.get("url") and not _is_run_alive(state, now_ts):
+    if _is_redirect_ready(state, now_ts):
+        if wants_json:
+            return JSONResponse(
+                {"url": state["url"], "status": "running"},
+                headers=_no_cache_headers(),
+            )
+        return _tunnel_redirect_page(state["url"], poll_url)
+    if state.get("url") and not _has_live_url(state, now_ts):
         cf_url_store.pop("url", None)
+        state["url"] = None
+
+    # If a previous launch failed, clear lock state so retries can spawn immediately.
+    if state.get("status") == "failed" and not _is_run_alive(state, now_ts):
+        cf_url_store.pop("launching", None)
+        state["launching"] = None
 
     should_spawn = True
     launch_ts = state.get("launching")
-    if isinstance(launch_ts, (int, float)) and (now_ts - launch_ts) < START_LOCK_TTL_SECONDS:
+    if (
+        isinstance(launch_ts, (int, float))
+        and (now_ts - launch_ts) < START_LOCK_TTL_SECONDS
+        and state.get("status") == "starting"
+    ):
         should_spawn = False
     if _is_run_alive(state, now_ts):
         should_spawn = False
@@ -373,41 +424,30 @@ def get_cf_url():
     if should_spawn:
         cf_url_store["launching"] = now_ts
         cf_url_store["status"] = "starting"
+        state["status"] = "starting"
         cf_url_store.pop("url", None)
         try:
             run.spawn()
         except Exception as e:
             cf_url_store["status"] = "failed"
             cf_url_store.pop("launching", None)
+            if not wants_json:
+                return _tunnel_redirect_page("", poll_url)
             return JSONResponse(
                 {"error": f"Failed to launch app: {e}"},
                 status_code=500,
                 headers=_no_cache_headers(),
             )
 
-    deadline = time.time() + STARTUP_WAIT_TIMEOUT_SECONDS
-    while time.time() < deadline:
-        state, state_err = _read_runtime_state()
-        if state_err:
-            return JSONResponse({"error": str(state_err)}, status_code=500, headers=_no_cache_headers())
-        if state.get("status") == "failed":
-            return JSONResponse(
-                {"error": "App failed to start. Check run() logs in Modal."},
-                status_code=500,
-                headers=_no_cache_headers(),
-            )
-        if state.get("url") and _is_run_alive(state):
-            return RedirectResponse(url=state["url"], status_code=307, headers=_no_cache_headers())
-        time.sleep(1)
+    if wants_json:
+        return JSONResponse(
+            {"status": state.get("status", "starting")},
+            status_code=202,
+            headers=_no_cache_headers(),
+        )
 
-    return JSONResponse(
-        {
-            "error": "App is starting. Retry in a few seconds.",
-            "status": "starting",
-        },
-        status_code=202,
-        headers=_no_cache_headers(),
-    )
+    # Return the redirect page immediately — it polls cf_url_json for readiness
+    return _tunnel_redirect_page("", poll_url)
 
 
 @app.function()
