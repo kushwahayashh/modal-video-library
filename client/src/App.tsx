@@ -23,6 +23,7 @@ const CONTEXT_MENU_ESTIMATED_HEIGHT = 340;
 function App() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
+  const [videosError, setVideosError] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [search, setSearch] = useState("");
@@ -45,6 +46,7 @@ function App() {
   const { pushToast: pushToastRaw } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<Plyr | null>(null);
+  const playerVideoIdRef = useRef<string | null>(null);
   const closeTimerRef = useRef<number | null>(null);
   const contextMenuReopenTimerRef = useRef<number | null>(null);
   const lastContextMenuCloseAtRef = useRef(0);
@@ -110,18 +112,33 @@ function App() {
     };
   }, []);
 
-  const fetchVideos = useCallback(() => {
-    fetch("/api/videos")
-      .then((r) => r.ok ? r.json() : { videos: [] })
-      .then((data) => {
-        setVideos(Array.isArray(data.videos) ? data.videos : []);
-      })
-      .catch(() => {
-        setVideos([]);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+  const fetchVideos = useCallback(async () => {
+    try {
+      const res = await fetch("/api/videos");
+      if (!res.ok) {
+        throw new Error(`Failed to load videos (${res.status})`);
+      }
+
+      const payload: unknown = await res.json();
+      const nextVideos =
+        payload &&
+        typeof payload === "object" &&
+        "videos" in payload &&
+        Array.isArray((payload as { videos?: unknown }).videos)
+          ? ((payload as { videos: Video[] }).videos)
+          : null;
+
+      if (!nextVideos) {
+        throw new Error("Invalid videos response");
+      }
+
+      setVideos(nextVideos);
+      setVideosError(null);
+    } catch (e) {
+      setVideosError(e instanceof Error ? e.message : "Failed to load videos");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   const getSafeContextMenuPosition = useCallback((x: number, y: number) => {
@@ -224,10 +241,11 @@ function App() {
     if (!renameValue.trim() || !actionVideo) return;
     setActionLoading(true);
     try {
+      const trimmedName = renameValue.trim();
       const res = await fetch(`/api/videos/${actionVideo.id}/rename`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ newName: renameValue.trim() }),
+        body: JSON.stringify({ newName: trimmedName }),
       });
       let payload: unknown = null;
       try {
@@ -248,6 +266,16 @@ function App() {
       ) {
         newVideoId = (payload as { id: string }).id.trim();
       }
+      let newFilename = actionVideo.filename;
+      if (
+        payload &&
+        typeof payload === "object" &&
+        "filename" in payload &&
+        typeof (payload as { filename?: unknown }).filename === "string" &&
+        (payload as { filename: string }).filename.trim()
+      ) {
+        newFilename = (payload as { filename: string }).filename.trim();
+      }
       if (newVideoId !== actionVideo.id) {
         setThumbnailOverrides((prev) => {
           const currentThumb = prev[actionVideo.id];
@@ -256,15 +284,34 @@ function App() {
           return { ...prev, [newVideoId]: currentThumb };
         });
       }
+      setVideos((prev) =>
+        prev.map((videoItem) => {
+          if (videoItem.id !== actionVideo.id) return videoItem;
+          return {
+            ...videoItem,
+            id: newVideoId,
+            filename: newFilename,
+            title: trimmedName,
+          };
+        })
+      );
+      setSelectedVideo((prev) => {
+        if (!prev || prev.id !== actionVideo.id) return prev;
+        return {
+          ...prev,
+          id: newVideoId,
+          filename: newFilename,
+          title: trimmedName,
+        };
+      });
       pushToast(`Renamed: ${actionVideo.title}`, "success");
       closeActionModal();
-      fetchVideos();
     } catch (e) {
       pushToast(e instanceof Error ? e.message : "Failed to rename");
     } finally {
       setActionLoading(false);
     }
-  }, [renameValue, actionVideo, pushToast, fetchVideos, getApiErrorMessage]);
+  }, [renameValue, actionVideo, pushToast, getApiErrorMessage]);
 
   const confirmDelete = useCallback(async () => {
     if (!actionVideo) return;
@@ -274,15 +321,21 @@ function App() {
         method: "DELETE",
       });
       if (!res.ok) throw new Error("Failed to delete");
+      setVideos((prev) => prev.filter((videoItem) => videoItem.id !== actionVideo.id));
+      setThumbnailOverrides((prev) => {
+        if (!(actionVideo.id in prev)) return prev;
+        const next = { ...prev };
+        delete next[actionVideo.id];
+        return next;
+      });
       pushToast(`Deleted: ${actionVideo.title}`, "success");
       closeActionModal();
-      fetchVideos();
     } catch {
       pushToast("Failed to delete video");
     } finally {
       setActionLoading(false);
     }
-  }, [actionVideo, pushToast, fetchVideos]);
+  }, [actionVideo, pushToast]);
 
   const handleRenameKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") confirmRename();
@@ -312,9 +365,16 @@ function App() {
       pushToast(job.error || "Sprite generation failed");
     } else if (job.status === "done") {
       pushToast(`Sprites ready: ${job.title}`, "success");
+      setVideos((prev) =>
+        prev.map((videoItem) =>
+          videoItem.id === job.videoId ? { ...videoItem, hasSprites: true } : videoItem
+        )
+      );
+      setSelectedVideo((prev) =>
+        prev && prev.id === job.videoId ? { ...prev, hasSprites: true } : prev
+      );
     }
-    fetchVideos();
-  }, [fetchVideos, pushToast]);
+  }, [pushToast]);
 
   const activeSpriteJobs = useSpriteProgress(handleSpriteJobSettled);
 
@@ -339,6 +399,7 @@ function App() {
         playerRef.current.destroy();
         playerRef.current = null;
       }
+      playerVideoIdRef.current = null;
       setSelectedVideo(null);
       closeTimerRef.current = null;
     }, 300);
@@ -404,20 +465,29 @@ function App() {
   }, [selectedVideo, closeModal, actionModal, processesModalOpen]);
 
   useEffect(() => {
-    if (selectedVideo && videoRef.current && !playerRef.current) {
-      if (selectedVideo.hasSprites) {
-        const existingTrack = videoRef.current.querySelector('track[kind="metadata"]');
-        if (!existingTrack) {
-          const track = document.createElement("track");
-          track.kind = "metadata";
-          track.label = "thumbnails";
-          track.src = `/api/sprites/${selectedVideo.id}/vtt`;
-          track.default = true;
-          videoRef.current.appendChild(track);
-        }
-      }
+    if (!selectedVideo || !videoRef.current) return;
 
-      playerRef.current = new Plyr(videoRef.current, {
+    const videoEl = videoRef.current;
+    const switchingVideo = playerVideoIdRef.current !== selectedVideo.id;
+
+    if (playerRef.current && switchingVideo) {
+      playerRef.current.destroy();
+      playerRef.current = null;
+    }
+
+    Array.from(videoEl.querySelectorAll('track[kind="metadata"]')).forEach((track) => track.remove());
+
+    if (selectedVideo.hasSprites) {
+      const track = document.createElement("track");
+      track.kind = "metadata";
+      track.label = "thumbnails";
+      track.src = `/api/sprites/${selectedVideo.id}/vtt`;
+      track.default = true;
+      videoEl.appendChild(track);
+    }
+
+    if (!playerRef.current) {
+      playerRef.current = new Plyr(videoEl, {
         controls: ["play-large", "play", "progress", "current-time", "mute", "volume", "fullscreen"],
         keyboard: { focused: true, global: true },
         previewThumbnails: selectedVideo.hasSprites ? {
@@ -426,6 +496,8 @@ function App() {
         } : { enabled: false },
       });
     }
+
+    playerVideoIdRef.current = selectedVideo.id;
   }, [selectedVideo]);
 
   useEffect(() => {
@@ -478,11 +550,30 @@ function App() {
 
       <main className="main">
         <div className="container">
+          {videosError && videos.length > 0 && (
+            <div className="status-banner" role="status" aria-live="polite">
+              <span className="status-banner-text">
+                Couldn&apos;t refresh videos. Showing last loaded list.
+              </span>
+              <button type="button" className="status-banner-btn" onClick={() => void fetchVideos()}>
+                Retry
+              </button>
+            </div>
+          )}
+
           {loading ? (
             <div className="video-grid">
               {[...Array(18)].map((_, i) => (
                 <div key={i} className="skeleton-card" />
               ))}
+            </div>
+          ) : videosError && videos.length === 0 ? (
+            <div className="empty">
+              <h2>Couldn&apos;t load videos</h2>
+              <p>{videosError}</p>
+              <button type="button" className="empty-retry-btn" onClick={() => void fetchVideos()}>
+                Retry
+              </button>
             </div>
           ) : videos.length === 0 ? (
             <div className="empty">

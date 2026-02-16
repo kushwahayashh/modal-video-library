@@ -1,8 +1,9 @@
 import { X } from "lucide-react";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useId, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { Video } from "../../types";
 import { formatBytes, formatDate } from "../../utils";
 import ThumbnailPicker from "../ThumbnailPicker";
+import { useDialogFocusTrap } from "../../hooks/useDialogFocusTrap";
 import type { ActionModalType, VideoProperties } from "./types";
 
 interface VideoActionModalProps {
@@ -61,7 +62,7 @@ function DetailSection({ title, items }: { title: string; items: DetailItem[] })
 
 function ModalHeader({ onClose }: { onClose: () => void }) {
   return (
-    <button className="action-modal-close" onClick={onClose}>
+    <button type="button" className="action-modal-close" aria-label="Close modal" onClick={onClose}>
       <X size={20} />
     </button>
   );
@@ -87,6 +88,19 @@ export default function VideoActionModal({
   selectedThumbnail,
   onThumbnailSelect,
 }: VideoActionModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const trapActive = !!actionModal && !closing;
+  useDialogFocusTrap({ active: trapActive, containerRef: dialogRef });
+
+  const dialogTitle = useMemo(() => {
+    if (actionModal === "rename") return "Rename Video";
+    if (actionModal === "delete") return "Delete Video";
+    if (actionModal === "thumbnail") return "Change Thumbnail";
+    if (actionModal === "properties") return "Properties";
+    return "Video Action";
+  }, [actionModal]);
+
   if ((!actionModal || !actionVideo) && !closing) return null;
   if (!actionVideo) return null;
 
@@ -138,12 +152,20 @@ export default function VideoActionModal({
         }
       }}
     >
-      <div className={modalClassName} onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        className={modalClassName}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+      >
         <ModalHeader onClose={onClose} />
 
         {actionModal === "rename" && (
           <>
-            <div className="action-modal-title">Rename Video</div>
+            <div id={titleId} className="action-modal-title">{dialogTitle}</div>
             <input
               className="action-modal-input"
               value={renameValue}
@@ -154,8 +176,8 @@ export default function VideoActionModal({
               placeholder="Enter new name"
             />
             <div className="action-modal-actions">
-              <button className="action-btn secondary" onClick={onClose}>Cancel</button>
-              <button className="action-btn primary" onClick={onConfirmRename} disabled={actionLoading}>
+              <button type="button" className="action-btn secondary" onClick={onClose}>Cancel</button>
+              <button type="button" className="action-btn primary" onClick={onConfirmRename} disabled={actionLoading}>
                 {actionLoading ? "Renaming..." : "Rename"}
               </button>
             </div>
@@ -164,15 +186,15 @@ export default function VideoActionModal({
 
         {actionModal === "delete" && (
           <>
-            <div className="action-modal-title">Delete Video</div>
+            <div id={titleId} className="action-modal-title">{dialogTitle}</div>
             <div className="action-modal-message">
               Are you sure you want to delete <strong>"{actionVideo.title}"</strong>?
               <br />
               <span className="text-muted">This action cannot be undone.</span>
             </div>
             <div className="action-modal-actions">
-              <button className="action-btn secondary" onClick={onClose}>Cancel</button>
-              <button className="action-btn danger" onClick={onConfirmDelete} disabled={actionLoading}>
+              <button type="button" className="action-btn secondary" onClick={onClose}>Cancel</button>
+              <button type="button" className="action-btn danger" onClick={onConfirmDelete} disabled={actionLoading}>
                 {actionLoading ? "Deleting..." : "Delete"}
               </button>
             </div>
@@ -182,7 +204,7 @@ export default function VideoActionModal({
         {actionModal === "properties" && (
           <>
             <div className="prop-header">
-              <div className="prop-label">Properties</div>
+              <div id={titleId} className="prop-label">{dialogTitle}</div>
               <div className="prop-title">{actionVideo.title}</div>
               <div className="prop-filename">{actionVideo.filename}</div>
             </div>
@@ -237,14 +259,14 @@ export default function VideoActionModal({
               )}
             </div>
             <div className="action-modal-actions">
-              <button className="action-btn primary" onClick={onClose}>Close</button>
+              <button type="button" className="action-btn primary" onClick={onClose}>Close</button>
             </div>
           </>
         )}
 
         {actionModal === "thumbnail" && (
           <>
-            <div className="action-modal-title">Change Thumbnail</div>
+            <div id={titleId} className="action-modal-title">{dialogTitle}</div>
             <ThumbnailPicker
               images={placeholderImages}
               loading={placeholdersLoading}
@@ -252,7 +274,7 @@ export default function VideoActionModal({
               onSelect={onThumbnailSelect}
             />
             <div className="action-modal-actions">
-              <button className="action-btn secondary" onClick={onClose}>Cancel</button>
+              <button type="button" className="action-btn secondary" onClick={onClose}>Cancel</button>
             </div>
           </>
         )}

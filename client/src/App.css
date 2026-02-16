@@ -173,6 +173,38 @@
   100% { transform: translateX(100%); }
 }
 
+/* Status Banner */
+.status-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+}
+
+.status-banner-text {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.status-banner-btn {
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  padding: 6px 10px;
+}
+
+.status-banner-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--text-muted);
+}
+
 /* Empty State */
 .empty {
   text-align: center;
@@ -195,6 +227,21 @@
 .empty p {
   color: var(--text-muted);
   font-size: 0.875rem;
+}
+
+.empty-retry-btn {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 10px 16px;
+}
+
+.empty-retry-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--text-muted);
 }
 
 /* Video Grid */

@@ -1,6 +1,7 @@
-import type { RefObject } from "react";
+import { useId, useRef, type RefObject } from "react";
 import { Check } from "lucide-react";
 import type { Video } from "../../types";
+import { useDialogFocusTrap } from "../../hooks/useDialogFocusTrap";
 
 interface VideoPlayerModalProps {
   selectedVideo: Video | null;
@@ -15,13 +16,24 @@ export default function VideoPlayerModal({
   videoRef,
   onClose,
 }: VideoPlayerModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useDialogFocusTrap({ active: modalVisible && !!selectedVideo, containerRef: dialogRef });
   if (!selectedVideo) return null;
 
   return (
     <div className={`modal-overlay ${modalVisible ? "visible" : ""}`} onClick={onClose}>
-      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        className="modal-box"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
-          <span>{selectedVideo.title}</span>
+          <span id={titleId}>{selectedVideo.title}</span>
           {selectedVideo.hasSprites && (
             <span className="sprite-badge">
               <Check size={14} />
