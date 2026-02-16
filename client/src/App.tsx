@@ -1,41 +1,25 @@
-import { useState, useEffect, useRef, useCallback, useMemo, type MouseEvent as ReactMouseEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Search } from "lucide-react";
+import { useState, useEffect, useRef, useCallback, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { FolderOpen, Search, SearchX } from "lucide-react";
 import Plyr from "plyr";
 import "plyr/dist/plyr.css";
 import "./App.css";
 import type { Video } from "./types";
 import { useSpriteProgress, type SpriteProgressJob } from "./hooks/useSpriteProgress";
+import { useVideoLibraryData } from "./hooks/useVideoLibraryData";
+import { useContextMenuState } from "./hooks/useContextMenuState";
 import { useToast } from "./components/ToastProvider";
 import ContextMenu from "./components/video-library/ContextMenu";
-import VideoCard from "./components/video-library/VideoCard";
+import VirtualizedVideoGrid from "./components/video-library/VirtualizedVideoGrid";
 import VideoPlayerModal from "./components/video-library/VideoPlayerModal";
 import VideoActionModal from "./components/video-library/VideoActionModal";
 import ProcessesModal from "./components/video-library/ProcessesModal";
-import { saveThumbnailToServer } from "./components/video-library/helpers";
-import type { ActionModalType, ContextMenuState, VideoProperties } from "./components/video-library/types";
-
-const CONTEXT_MENU_REOPEN_DELAY_MS = 145;
-const CONTEXT_MENU_RECENT_CLOSE_WINDOW_MS = 220;
-const CONTEXT_MENU_VIEWPORT_MARGIN = 8;
-const CONTEXT_MENU_ESTIMATED_WIDTH = 240;
-const CONTEXT_MENU_ESTIMATED_HEIGHT = 340;
+import type { ActionModalType, VideoProperties } from "./components/video-library/types";
 
 function App() {
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [videosError, setVideosError] = useState<string | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [search, setSearch] = useState("");
-  const [placeholderImages, setPlaceholderImages] = useState<string[]>([]);
-  const [placeholdersLoading, setPlaceholdersLoading] = useState(true);
-  const [thumbnailOverrides, setThumbnailOverrides] = useState<Record<string, string>>({});
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>({
-    visible: false,
-    x: 0,
-    y: 0,
-    video: null,
-  });
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [actionModal, setActionModal] = useState<ActionModalType>(null);
   const [actionModalClosing, setActionModalClosing] = useState(false);
   const [actionVideo, setActionVideo] = useState<Video | null>(null);
@@ -44,12 +28,32 @@ function App() {
   const [actionLoading, setActionLoading] = useState(false);
   const [processesModalOpen, setProcessesModalOpen] = useState(false);
   const { pushToast: pushToastRaw } = useToast();
+  const pushToast = useCallback((message: string, variant: "error" | "success" = "error") => {
+    pushToastRaw({ variant, message });
+  }, [pushToastRaw]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<Plyr | null>(null);
   const playerVideoIdRef = useRef<string | null>(null);
   const closeTimerRef = useRef<number | null>(null);
-  const contextMenuReopenTimerRef = useRef<number | null>(null);
-  const lastContextMenuCloseAtRef = useRef(0);
+  const { contextMenu, openContextMenu, closeContextMenu } = useContextMenuState();
+  const {
+    videos,
+    setVideos,
+    loading,
+    loadingMore,
+    hasMore,
+    videosError,
+    placeholderImages,
+    placeholdersLoading,
+    thumbnailOverrides,
+    setThumbnailOverrides,
+    fetchVideos,
+    loadMoreVideos,
+    updateThumbnailOverride,
+  } = useVideoLibraryData({
+    onThumbnailSaveError: (message) => pushToast(message),
+    searchQuery: debouncedSearch,
+  });
   const hasVideoDetails = !!(
     videoProps?.resolution ||
     videoProps?.videoCodec ||
@@ -64,10 +68,6 @@ function App() {
     videoProps?.sampleRate
   );
 
-  const pushToast = useCallback((message: string, variant: "error" | "success" = "error") => {
-    pushToastRaw({ variant, message });
-  }, [pushToastRaw]);
-
   const getApiErrorMessage = useCallback((payload: unknown, fallback: string) => {
     if (
       payload &&
@@ -81,129 +81,12 @@ function App() {
     return fallback;
   }, []);
 
-  const updateThumbnailOverride = useCallback(async (videoId: string, imageUrl: string) => {
-    setThumbnailOverrides((prev) => ({ ...prev, [videoId]: imageUrl }));
-    try {
-      await saveThumbnailToServer(videoId, imageUrl);
-    } catch (e) {
-      pushToast(e instanceof Error ? e.message : "Failed to save thumbnail");
-    }
-  }, [pushToast]);
-
   useEffect(() => {
-    let active = true;
-    Promise.all([
-      fetch("/api/placeholder-images").then((r) => r.ok ? r.json() : { images: [] }),
-      fetch("/api/thumbnail-map").then((r) => r.ok ? r.json() : {}),
-    ]).then(([imgData, mapData]) => {
-      if (!active) return;
-      if (Array.isArray(imgData?.images)) setPlaceholderImages(imgData.images);
-      if (mapData && typeof mapData === "object" && !Array.isArray(mapData)) {
-        setThumbnailOverrides(mapData as Record<string, string>);
-      }
-    }).catch(() => {
-      if (active) setPlaceholderImages([]);
-    }).finally(() => {
-      if (active) setPlaceholdersLoading(false);
-    });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const fetchVideos = useCallback(async () => {
-    try {
-      const res = await fetch("/api/videos");
-      if (!res.ok) {
-        throw new Error(`Failed to load videos (${res.status})`);
-      }
-
-      const payload: unknown = await res.json();
-      const nextVideos =
-        payload &&
-        typeof payload === "object" &&
-        "videos" in payload &&
-        Array.isArray((payload as { videos?: unknown }).videos)
-          ? ((payload as { videos: Video[] }).videos)
-          : null;
-
-      if (!nextVideos) {
-        throw new Error("Invalid videos response");
-      }
-
-      setVideos(nextVideos);
-      setVideosError(null);
-    } catch (e) {
-      setVideosError(e instanceof Error ? e.message : "Failed to load videos");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const getSafeContextMenuPosition = useCallback((x: number, y: number) => {
-    const maxX = window.innerWidth - CONTEXT_MENU_ESTIMATED_WIDTH - CONTEXT_MENU_VIEWPORT_MARGIN;
-    const maxY = window.innerHeight - CONTEXT_MENU_ESTIMATED_HEIGHT - CONTEXT_MENU_VIEWPORT_MARGIN;
-    return {
-      x: Math.max(CONTEXT_MENU_VIEWPORT_MARGIN, Math.min(x, maxX)),
-      y: Math.max(CONTEXT_MENU_VIEWPORT_MARGIN, Math.min(y, maxY)),
-    };
-  }, []);
-
-  const closeContextMenu = useCallback(() => {
-    if (contextMenuReopenTimerRef.current !== null) {
-      window.clearTimeout(contextMenuReopenTimerRef.current);
-      contextMenuReopenTimerRef.current = null;
-    }
-    setContextMenu((prev) => {
-      if (prev.visible) {
-        lastContextMenuCloseAtRef.current = Date.now();
-      }
-      return { ...prev, visible: false };
-    });
-  }, []);
-
-  const openContextMenu = useCallback((e: ReactMouseEvent, video: Video) => {
-    e.preventDefault();
-    const now = Date.now();
-    const recentlyClosed = now - lastContextMenuCloseAtRef.current < CONTEXT_MENU_RECENT_CLOSE_WINDOW_MS;
-
-    if (contextMenuReopenTimerRef.current !== null) {
-      window.clearTimeout(contextMenuReopenTimerRef.current);
-      contextMenuReopenTimerRef.current = null;
-    }
-
-    if (contextMenu.visible || recentlyClosed) {
-      closeContextMenu();
-      const nextPosition = getSafeContextMenuPosition(e.clientX, e.clientY);
-      contextMenuReopenTimerRef.current = window.setTimeout(() => {
-        setContextMenu({
-          visible: true,
-          x: nextPosition.x,
-          y: nextPosition.y,
-          video,
-        });
-        contextMenuReopenTimerRef.current = null;
-      }, CONTEXT_MENU_REOPEN_DELAY_MS);
-      return;
-    }
-
-    const nextPosition = getSafeContextMenuPosition(e.clientX, e.clientY);
-    setContextMenu({
-      visible: true,
-      x: nextPosition.x,
-      y: nextPosition.y,
-      video,
-    });
-  }, [contextMenu.visible, closeContextMenu, getSafeContextMenuPosition]);
-
-  useEffect(() => {
-    return () => {
-      if (contextMenuReopenTimerRef.current !== null) {
-        window.clearTimeout(contextMenuReopenTimerRef.current);
-      }
-    };
-  }, []);
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   const openActionModal = (type: ActionModalType, video: Video) => {
     setActionModalClosing(false);
@@ -436,17 +319,7 @@ function App() {
     }
   };
 
-  const normalizedSearch = search.trim().toLowerCase();
-  const filteredVideos = useMemo(
-    () =>
-      videos
-        .filter((v) => v.title.toLowerCase().includes(normalizedSearch))
-        .sort(
-          (a, b) =>
-            new Date(b.addedAt || b.createdAt).getTime() - new Date(a.addedAt || a.createdAt).getTime()
-        ),
-    [videos, normalizedSearch]
-  );
+  const hasActiveSearch = debouncedSearch.length > 0;
 
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
@@ -513,10 +386,6 @@ function App() {
     };
   }, [selectedVideo]);
 
-  useEffect(() => {
-    fetchVideos();
-  }, [fetchVideos]);
-
   return (
     <div className="app">
       <nav className="nav">
@@ -575,31 +444,36 @@ function App() {
                 Retry
               </button>
             </div>
-          ) : videos.length === 0 ? (
+          ) : hasActiveSearch && videos.length === 0 ? (
             <div className="empty">
-              <div className="empty-icon">📁</div>
-              <h2>No videos yet</h2>
-              <p>Upload or download videos to get started</p>
-            </div>
-          ) : filteredVideos.length === 0 ? (
-            <div className="empty">
-              <div className="empty-icon">🔍</div>
+              <SearchX className="empty-icon" aria-hidden="true" />
               <h2>No results</h2>
               <p>No videos match your search</p>
             </div>
-          ) : (
-            <div className="video-grid">
-              {filteredVideos.map((video) => (
-                <VideoCard
-                  key={video.id}
-                  video={video}
-                  onClick={() => openModal(video)}
-                  onContextMenu={openContextMenu}
-                  placeholderImages={placeholderImages}
-                  thumbnailOverrides={thumbnailOverrides}
-                />
-              ))}
+          ) : videos.length === 0 ? (
+            <div className="empty">
+              <FolderOpen className="empty-icon" aria-hidden="true" />
+              <h2>No videos yet</h2>
+              <p>Upload or download videos to get started</p>
             </div>
+          ) : (
+            <>
+              <VirtualizedVideoGrid
+                videos={videos}
+                onVideoClick={openModal}
+                onVideoContextMenu={openContextMenu}
+                placeholderImages={placeholderImages}
+                thumbnailOverrides={thumbnailOverrides}
+                hasMore={hasMore}
+                loadingMore={loadingMore}
+                onLoadMore={() => {
+                  void loadMoreVideos();
+                }}
+              />
+              {loadingMore && (
+                <div className="video-grid-load-more">Loading more videos...</div>
+              )}
+            </>
           )}
         </div>
       </main>

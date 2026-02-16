@@ -206,7 +206,25 @@ app.get("/cf", async (_request, reply) => {
   return reply.redirect(cloudflareUrl);
 });
 
-app.get("/api/videos", async () => {
+app.get("/api/videos", async (request) => {
+  const query = request.query || {};
+  const queryText = typeof query.q === "string" ? query.q.trim().toLowerCase() : "";
+  const parsedLimit = Number.parseInt(
+    typeof query.limit === "string" ? query.limit : "",
+    10
+  );
+  const parsedOffset = Number.parseInt(
+    typeof query.offset === "string" ? query.offset : "",
+    10
+  );
+  const usePagination = Number.isFinite(parsedLimit) && parsedLimit > 0;
+  const limit = usePagination ? Math.min(200, parsedLimit) : 0;
+  const offset = usePagination
+    ? Number.isFinite(parsedOffset) && parsedOffset > 0
+      ? parsedOffset
+      : 0
+    : 0;
+
   try {
     if (!(await fileExists(VIDEOS_DIR))) return { videos: [], total: 0 };
 
@@ -256,7 +274,32 @@ app.get("/api/videos", async () => {
     }
 
     videos.sort((a, b) => new Date(b.addedAt) - new Date(a.addedAt));
-    return { videos, total: videos.length };
+
+    let filtered = videos;
+    if (queryText) {
+      filtered = videos.filter((video) => {
+        const title = String(video.title || "").toLowerCase();
+        const filename = String(video.filename || "").toLowerCase();
+        return title.includes(queryText) || filename.includes(queryText);
+      });
+    }
+
+    const total = filtered.length;
+    if (!usePagination) {
+      return { videos: filtered, total };
+    }
+
+    const pageVideos = filtered.slice(offset, offset + limit);
+    const nextOffset = offset + pageVideos.length;
+    const hasMore = nextOffset < total;
+    return {
+      videos: pageVideos,
+      total,
+      offset,
+      limit,
+      hasMore,
+      nextOffset: hasMore ? nextOffset : null,
+    };
   } catch (e) {
     console.error("Error reading videos:", e);
     return { videos: [], total: 0 };
