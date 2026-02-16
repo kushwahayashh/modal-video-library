@@ -150,6 +150,7 @@ export default function VideoActionModal({
               onChange={(e) => onRenameValueChange(e.target.value)}
               onKeyDown={onRenameKeyDown}
               autoFocus
+              spellCheck={false}
               placeholder="Enter new name"
             />
             <div className="action-modal-actions">

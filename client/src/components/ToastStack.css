@@ -47,14 +47,6 @@
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 640px) {
-  .toast-vp {
-    right: 12px;
-    bottom: 12px;
-    width: calc(100vw - 24px);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .toast-card {
     transition: none;
