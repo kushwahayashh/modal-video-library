@@ -1,4 +1,3 @@
-import { X } from "lucide-react";
 import { useId, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { Video } from "../../types";
 import { formatBytes, formatDate } from "../../utils";
@@ -60,13 +59,7 @@ function DetailSection({ title, items }: { title: string; items: DetailItem[] })
   );
 }
 
-function ModalHeader({ onClose }: { onClose: () => void }) {
-  return (
-    <button type="button" className="action-modal-close" aria-label="Close modal" onClick={onClose}>
-      <X size={20} />
-    </button>
-  );
-}
+
 
 export default function VideoActionModal({
   actionModal,
@@ -161,8 +154,6 @@ export default function VideoActionModal({
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
-        <ModalHeader onClose={onClose} />
-
         {actionModal === "rename" && (
           <>
             <div id={titleId} className="action-modal-title">{dialogTitle}</div>

@@ -39,7 +39,9 @@ try {
 const DATA_DIR = process.env.DATA_DIR || "/data";
 const VIDEOS_DIR = path.join(DATA_DIR, "videos");
 const SPRITES_DIR = path.join(DATA_DIR, "sprites");
-const PLACEHOLDERS_DIR = path.join(__dirname, "../../images");
+const PLACEHOLDERS_DIR = path.resolve(
+  process.env.PLACEHOLDERS_DIR || path.join(__dirname, "../../images")
+);
 const PLACEHOLDER_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
 const VIDEO_SCAN_CONCURRENCY = Math.max(
   1,
@@ -86,6 +88,33 @@ function fallbackAddedAt(stat) {
   );
   const ts = candidates.length > 0 ? candidates[0] : Date.now();
   return new Date(ts).toISOString();
+}
+
+function normalizeNonEmptyString(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function pickStablePlaceholder(seed, placeholders) {
+  if (placeholders.length === 0) return null;
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+  return placeholders[hash % placeholders.length] || null;
+}
+
+async function listPlaceholderImageUrls() {
+  try {
+    const entries = await fsp.readdir(PLACEHOLDERS_DIR, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isFile() && PLACEHOLDER_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
+      .map((entry) => `/api/placeholder-images/${encodeURIComponent(entry.name)}`)
+      .sort();
+  } catch {
+    return [];
+  }
 }
 
 async function mapWithConcurrency(items, concurrency, mapper) {
@@ -145,16 +174,7 @@ app.get("/api/runtime/status", async () => {
 });
 
 app.get("/api/placeholder-images", async () => {
-  try {
-    const entries = await fsp.readdir(PLACEHOLDERS_DIR, { withFileTypes: true });
-    const images = entries
-      .filter((entry) => entry.isFile() && PLACEHOLDER_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
-      .map((entry) => `/api/placeholder-images/${encodeURIComponent(entry.name)}`)
-      .sort();
-    return { images };
-  } catch {
-    return { images: [] };
-  }
+  return { images: await listPlaceholderImageUrls() };
 });
 
 app.get("/api/thumbnail-map", async () => readThumbMap());
@@ -229,6 +249,9 @@ app.get("/api/videos", async (request) => {
     if (!(await fileExists(VIDEOS_DIR))) return { videos: [], total: 0 };
 
     const currentAddedMap = await readVideoAddedMap();
+    const currentThumbMap = await readThumbMap();
+    const placeholderImages = await listPlaceholderImageUrls();
+    const autoAssignedThumbMap = {};
     const nextAddedMap = {};
     let addedMapChanged = false;
 
@@ -245,6 +268,11 @@ app.get("/api/videos", async (request) => {
         const videoId = toBase64Url(normalizedPath);
         const storedAddedAt = normalizeIsoTimestamp(currentAddedMap[videoId]);
         const addedAt = storedAddedAt || fallbackAddedAt(stat);
+        const storedThumbnail = normalizeNonEmptyString(currentThumbMap[videoId]);
+        const thumbnail = storedThumbnail || pickStablePlaceholder(videoId, placeholderImages);
+        if (!storedThumbnail && thumbnail) {
+          autoAssignedThumbMap[videoId] = thumbnail;
+        }
         nextAddedMap[videoId] = addedAt;
         if (storedAddedAt !== addedAt) {
           addedMapChanged = true;
@@ -257,7 +285,7 @@ app.get("/api/videos", async (request) => {
           sizeBytes: stat.size,
           createdAt: stat.birthtime,
           addedAt,
-          thumbnail: null,
+          thumbnail,
           duration,
           hasSprites: fs.existsSync(path.join(SPRITES_DIR, videoId, "sprite.jpg")),
         };
@@ -271,6 +299,20 @@ app.get("/api/videos", async (request) => {
     }
     if (addedMapChanged) {
       await updateVideoAddedMap(() => nextAddedMap);
+    }
+    if (Object.keys(autoAssignedThumbMap).length > 0) {
+      try {
+        await updateThumbMap((thumbMap) => {
+          for (const [videoId, imageUrl] of Object.entries(autoAssignedThumbMap)) {
+            if (!normalizeNonEmptyString(thumbMap[videoId])) {
+              thumbMap[videoId] = imageUrl;
+            }
+          }
+          return thumbMap;
+        });
+      } catch (e) {
+        console.warn("Failed to persist auto-assigned thumbnails:", e);
+      }
     }
 
     videos.sort((a, b) => new Date(b.addedAt) - new Date(a.addedAt));

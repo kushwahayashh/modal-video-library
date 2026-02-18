@@ -8,7 +8,7 @@ This catalog covers all tracked repository files (excluding generated folders li
 - `README.md`: high-level project introduction and run instructions.
 - `design.md`: prompt-like frontend design guidance text.
 - `main.py`: local bootstrapper for dependency install/build/start.
-- `modal_app.py`: Modal image definition and runtime entrypoint.
+- `app.py`: Modal image definition and runtime entrypoint.
 - `start-tunnel.sh`: local tunnel helper and backend URL registration script.
 
 ## Backend (`server/`)

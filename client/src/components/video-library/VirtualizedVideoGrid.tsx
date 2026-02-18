@@ -151,6 +151,7 @@ export default function VirtualizedVideoGrid({
             className="video-grid-virtual-item"
             style={{
               width: cardWidth,
+              height: rowHeight,
               top: row * rowStride,
               left: col * (cardWidth + GRID_GAP),
             }}

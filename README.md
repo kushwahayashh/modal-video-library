@@ -13,7 +13,7 @@ A self-hosted video library app that runs locally or on Modal with a Cloudflare 
 
 ```
 ├── main.py           # Local entry point
-├── modal_app.py      # Modal entry point (image + cloudflare tunnel)
+├── app.py            # Modal entry point (image + cloudflare tunnel)
 ├── server/           # Bun + Fastify backend
 │   ├── package.json
 │   └── src/
@@ -52,7 +52,7 @@ First run will install dependencies and build the client automatically.
 ## Running on Modal
 
 ```bash
-modal run modal_app.py
+modal run app.py
 ```
 
 This will:

@@ -4,7 +4,7 @@
 - Frontend web app: `client/` (React + Vite + TypeScript).
 - Backend API server: `server/src/index.js` (Bun + Fastify + WebSocket).
 - Local launcher: `main.py`.
-- Modal launcher and image definition: `modal_app.py`.
+- Modal launcher and image definition: `app.py`.
 - Static image assets: `images/`.
 
 ## Runtime Topology
@@ -51,7 +51,7 @@
 3. Input/output frames are exchanged as JSON messages.
 
 ### Modal Cloud URL Registration
-1. `modal_app.py` starts cloudflared tunnel process.
+1. `app.py` starts cloudflared tunnel process.
 2. Extracted `*.trycloudflare.com` URL is stored in Modal Dict.
 3. URL is posted to backend via `POST /api/cf-url` for app-level awareness.
 

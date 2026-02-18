@@ -1,4 +1,4 @@
-# Deployment on Modal (`modal_app.py`)
+# Deployment on Modal (`app.py`)
 
 ## Modal Objects
 - App name: `video-library`.

@@ -11,7 +11,7 @@ APP_ROOT = "/app"
 SERVER_PORT = 3000
 HEALTH_URL = f"http://localhost:{SERVER_PORT}/api/health"
 RUNTIME_STATUS_URL = f"http://localhost:{SERVER_PORT}/api/runtime/status"
-IDLE_TIMEOUT_SECONDS = 4 * 60 * 60
+IDLE_TIMEOUT_SECONDS = 2 * 60 * 60
 IDLE_POLL_INTERVAL_SECONDS = 60
 RUN_HEARTBEAT_TTL_SECONDS = 15
 START_LOCK_TTL_SECONDS = 20 * 60
@@ -361,7 +361,7 @@ def run():
                         idle_for = max(0.0, now_ts - last_activity_ts)
 
                         if terminal_count <= 0 and active_jobs <= 0 and idle_for >= IDLE_TIMEOUT_SECONDS:
-                            log("  Idle timeout reached (4h). Stopping app...")
+                            log("  Idle timeout reached (2h). Stopping app...")
                             break
                 except Exception:
                     # Keep running if status probe fails temporarily.

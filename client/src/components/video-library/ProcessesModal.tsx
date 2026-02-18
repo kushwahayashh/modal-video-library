@@ -1,5 +1,4 @@
 import { useId, useRef } from "react";
-import { X } from "lucide-react";
 import type { SpriteProgressJob } from "../../hooks/useSpriteProgress";
 import { useDialogFocusTrap } from "../../hooks/useDialogFocusTrap";
 
@@ -53,10 +52,6 @@ export default function ProcessesModal({ open, jobs, onClose }: ProcessesModalPr
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
-        <button type="button" className="action-modal-close" aria-label="Close processes modal" onClick={onClose}>
-          <X size={20} />
-        </button>
-
         <div id={titleId} className="action-modal-title">Processes</div>
         <div className="processes-meta">
           {jobs.length === 0 ? "No active jobs" : `${jobs.length} active ${jobs.length === 1 ? "job" : "jobs"}`}

@@ -320,6 +320,7 @@ function App() {
   };
 
   const hasActiveSearch = debouncedSearch.length > 0;
+  const isSearchPending = search.trim() !== debouncedSearch;
 
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
@@ -395,7 +396,7 @@ function App() {
           </a>
 
           <div className="nav-search-wrapper">
-            <Search size={18} className="nav-search-icon" />
+            <Search size={18} className={`nav-search-icon${isSearchPending ? " searching" : ""}`} />
             <input
               type="text"
               className="nav-search"
@@ -406,12 +407,12 @@ function App() {
           </div>
 
           <div className="nav-right">
-            <button className="nav-btn nav-process-btn" onClick={() => setProcessesModalOpen(true)}>
-              Processes
-              {activeSpriteJobs.length > 0 && (
+            {activeSpriteJobs.length > 0 && (
+              <button className="nav-btn nav-process-btn" onClick={() => setProcessesModalOpen(true)}>
+                Processes
                 <span className="nav-process-count">{activeSpriteJobs.length}</span>
-              )}
-            </button>
+              </button>
+            )}
             <a href="/terminal" target="_blank" rel="noopener noreferrer" className="nav-btn">Terminal</a>
           </div>
         </div>

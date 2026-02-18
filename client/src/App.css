@@ -51,6 +51,16 @@
   transform: translateY(-50%);
   color: var(--text-muted);
   pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.nav-search-icon.searching {
+  animation: searchPulse 0.8s ease-in-out infinite;
+}
+
+@keyframes searchPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
 }
 
 .nav-search {
@@ -60,6 +70,7 @@
   border: 1px solid var(--border);
   color: var(--text-primary);
   font-size: 0.875rem;
+  border-radius: 6px;
   transition: border-color 0.2s;
 }
 
@@ -70,22 +81,6 @@
 .nav-search:focus {
   outline: none;
   border-color: var(--text-muted);
-}
-
-.nav-links {
-  display: flex;
-  gap: 32px;
-}
-
-.nav-links a {
-  font-size: 0.875rem;
-  color: var(--text-secondary);
-  transition: color 0.2s;
-  font-weight: 400;
-}
-
-.nav-links a:hover {
-  color: var(--text-primary);
 }
 
 .nav-right {
@@ -99,6 +94,7 @@
   background: var(--bg-card);
   color: var(--text-primary);
   border: 1px solid var(--border);
+  border-radius: 6px;
   font-size: 0.875rem;
   font-weight: 500;
   transition: all 0.2s;
@@ -150,6 +146,7 @@
 .skeleton-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
+  border-radius: 8px;
   aspect-ratio: 16 / 12;
   position: relative;
   overflow: hidden;
@@ -183,6 +180,7 @@
   padding: 10px 12px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
+  border-radius: 8px;
 }
 
 .status-banner-text {
@@ -193,6 +191,7 @@
 
 .status-banner-btn {
   border: 1px solid var(--border);
+  border-radius: 6px;
   background: var(--bg-card);
   color: var(--text-primary);
   font-size: 0.8125rem;
@@ -237,6 +236,7 @@
 .empty-retry-btn {
   margin-top: 16px;
   border: 1px solid var(--border);
+  border-radius: 6px;
   background: var(--bg-card);
   color: var(--text-primary);
   font-size: 0.875rem;
@@ -274,6 +274,7 @@
   margin-top: 16px;
   padding: 10px 12px;
   border: 1px solid var(--border);
+  border-radius: 8px;
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   font-size: 0.8125rem;
@@ -282,8 +283,11 @@
 
 /* Video Card */
 .video-card {
+  height: 100%;
   background: var(--bg-card);
   border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
   transition: all 0.2s;
   cursor: pointer;
 }
@@ -334,6 +338,7 @@
   right: 8px;
   padding: 4px 8px;
   background: var(--overlay-strong);
+  border-radius: 4px;
   font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.02em;
@@ -369,7 +374,7 @@
   max-width: calc(100vw - 16px);
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 8px;
   padding: 6px 0;
   transform-origin: top left;
   animation: contextMenuEnter 0.14s ease-out;
@@ -501,7 +506,7 @@
 
 .modal-header {
   padding: 14px 20px;
-  font-size: 1rem;
+  font-size: 0.9375rem;
   font-weight: 500;
   color: var(--text-primary);
   border-bottom: 1px solid var(--border);
@@ -520,7 +525,7 @@
   color: var(--text-secondary);
   background: var(--bg-tertiary);
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: 6px;
   border: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -611,6 +616,7 @@
   max-width: 420px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
+  border-radius: 8px;
   padding: 24px;
   animation: slideUp 0.2s ease;
 }
@@ -641,22 +647,7 @@
   }
 }
 
-.action-modal-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  padding: 6px;
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all 0.2s;
-}
 
-.action-modal-close:hover {
-  color: var(--text-primary);
-  background: var(--bg-card);
-}
 
 .action-modal-title {
   font-size: 0.9375rem;
@@ -671,6 +662,7 @@
   padding: 10px 14px;
   background: var(--bg-card);
   border: 1px solid var(--border);
+  border-radius: 6px;
   color: var(--text-primary);
   font-size: 0.875rem;
   margin-bottom: 20px;
@@ -711,6 +703,7 @@
   font-size: 0.875rem;
   font-weight: 500;
   border: none;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -764,7 +757,7 @@
 }
 
 .prop-label {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
@@ -772,7 +765,7 @@
 }
 
 .prop-title {
-  font-size: 1rem;
+  font-size: 0.9375rem;
   font-weight: 600;
   letter-spacing: -0.01em;
   padding-right: 32px;
@@ -820,7 +813,7 @@
 }
 
 .prop-summary-label {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
@@ -848,7 +841,7 @@
 }
 
 .prop-section-title {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
@@ -885,7 +878,7 @@
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 4px;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: 0.02em;
@@ -986,6 +979,7 @@
   width: 100%;
   background: var(--bg-card);
   border: 2px solid var(--border);
+  border-radius: 8px;
   cursor: pointer;
   overflow: hidden;
   padding: 0;
@@ -994,6 +988,7 @@
 
 .thumbnail-picker-item.skeleton {
   border: 1px solid var(--border);
+  border-radius: 8px;
   background: var(--bg-tertiary);
 }
 
@@ -1034,6 +1029,7 @@
   display: block;
   opacity: 0;
   transition: opacity 0.2s ease;
+  border-radius: inherit;
 }
 
 .thumbnail-picker-item.loaded img {
@@ -1057,6 +1053,7 @@
   grid-column: 1 / -1;
   padding: 16px 12px;
   border: 1px solid var(--border);
+  border-radius: 8px;
   background: var(--bg-tertiary);
   color: var(--text-muted);
   font-size: 0.8125rem;
@@ -1099,6 +1096,7 @@
   justify-content: center;
   flex: 1;
   border: 1px solid var(--border);
+  border-radius: 8px;
   background: var(--bg-tertiary);
   color: var(--text-muted);
   font-size: 0.8125rem;
@@ -1108,6 +1106,7 @@
 
 .process-item {
   border: 1px solid var(--border);
+  border-radius: 8px;
   background: var(--bg-tertiary);
   padding: 12px;
 }
@@ -1129,6 +1128,7 @@
   font-size: 0.75rem;
   color: var(--text-secondary);
   border: 1px solid var(--border);
+  border-radius: 6px;
   background: var(--bg-card);
   padding: 2px 7px;
 }
@@ -1154,6 +1154,7 @@
   margin-top: 8px;
   height: 3px;
   background: var(--text-primary);
+  border-radius: 2px;
   min-width: 2px;
   transition: width 0.4s ease;
 }

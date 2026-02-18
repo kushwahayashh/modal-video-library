@@ -11,7 +11,7 @@
 - Frontend dev server: `cd client && bun run dev`
 - Backend server: `cd server && bun run start`
 - Frontend build: `cd client && bun run build`
-- Modal run: `modal run modal_app.py`
+- Modal run: `modal run app.py`
 
 ## Local Run Behavior (`main.py`)
 - Checks and installs `server/node_modules` if missing.
