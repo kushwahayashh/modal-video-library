@@ -53,13 +53,15 @@ export default function ProcessesModal({ open, jobs, onClose }: ProcessesModalPr
         onClick={(e) => e.stopPropagation()}
       >
         <div id={titleId} className="action-modal-title">Processes</div>
-        <div className="processes-meta">
-          {jobs.length === 0 ? "No active jobs" : `${jobs.length} active ${jobs.length === 1 ? "job" : "jobs"}`}
-        </div>
+        {jobs.length > 0 && (
+          <div className="processes-meta">
+            {`${jobs.length} active ${jobs.length === 1 ? "job" : "jobs"}`}
+          </div>
+        )}
 
         <div className="processes-list">
           {jobs.length === 0 ? (
-            <div className="processes-empty">Nothing running right now.</div>
+            <div className="processes-empty">No active jobs</div>
           ) : (
             jobs.map((job) => {
               const progress = getProgress(job);

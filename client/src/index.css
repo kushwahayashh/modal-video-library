@@ -31,7 +31,9 @@
   box-sizing: border-box;
 }
 
-html {
+html,
+body,
+#root {
   scroll-behavior: smooth;
 }
 

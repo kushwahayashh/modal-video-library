@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600&display=swap" media="print" onload="this.media='all'">
-<title>Redirecting...</title>
+<title>Luna</title>
 <style>
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -97,6 +97,29 @@
     100% { transform: translateX(400%); width: 30%; }
   }
 
+  .open-btn {
+    display: none;
+    margin-top: 24px;
+    padding: 12px 32px;
+    background: #fff;
+    color: #0a0a0a;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+
+  .open-btn:hover { opacity: 0.85; }
+
+  .open-btn.visible {
+    display: inline-block;
+    animation: fadeUp 0.5s ease forwards;
+  }
+
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(12px); }
     to { opacity: 1; transform: translateY(0); }
@@ -107,72 +130,35 @@
 <div class="bg"></div>
 <div class="gradient"></div>
 <div class="content">
-  <div class="title">Redirecting you...</div>
+  <div class="title" id="title">Starting up...</div>
   <div class="subtitle" id="sub">Waiting for tunnel to come online</div>
-  <div class="bar-track"><div class="bar-fill"></div></div>
+  <div class="bar-track" id="bar"><div class="bar-fill"></div></div>
+  <a id="open-btn" class="open-btn" href="#" target="_blank" rel="noopener noreferrer">Open</a>
 </div>
 <script>
 (function() {
   var pollUrl = "{{POLL_URL}}";
   var attempts = 0;
 
-  var tunnelUrl = null;
-  var redirected = false;
-  var animationDone = false;
-  var minDelay = 3000;
+  var ready = false;
+  var tunnelUrl = "{{TUNNEL_URL}}";
   var subtitleEl = document.getElementById("sub");
+  var titleEl = document.getElementById("title");
+  var barEl = document.getElementById("bar");
+  var openBtn = document.getElementById("open-btn");
 
-  setTimeout(function() {
-    animationDone = true;
-    if (tunnelUrl) verifyAndRedirect(tunnelUrl);
-  }, minDelay);
-
-  function addDnsPrefetch(url) {
-    try {
-      var a = document.createElement("a");
-      a.href = url;
-      var link = document.createElement("link");
-      link.rel = "dns-prefetch";
-      link.href = "//" + a.hostname;
-      document.head.appendChild(link);
-      var preconnect = document.createElement("link");
-      preconnect.rel = "preconnect";
-      preconnect.href = a.protocol + "//" + a.hostname;
-      document.head.appendChild(preconnect);
-    } catch(e) {}
+  function showReady(url) {
+    if (ready) return;
+    ready = true;
+    titleEl.textContent = "Ready";
+    subtitleEl.style.display = "none";
+    barEl.style.display = "none";
+    openBtn.href = url;
+    openBtn.classList.add("visible");
   }
 
-  var prefetched = false;
-
-  function queueRedirect(url) {
-    if (!url) return;
-    tunnelUrl = url;
-    if (!prefetched) { prefetched = true; addDnsPrefetch(url); }
-    if (animationDone) verifyAndRedirect(url);
-  }
-
-  function verifyAndRedirect(url, retries) {
-    if (redirected) return;
-    retries = retries || 0;
-    if (subtitleEl) subtitleEl.textContent = "Verifying tunnel is reachable...";
-    fetch(url, { mode: "no-cors", cache: "no-store" })
-      .then(function() {
-        redirectNow(url);
-      })
-      .catch(function() {
-        if (retries < 15) {
-          setTimeout(function() { verifyAndRedirect(url, retries + 1); }, 2000);
-        } else {
-          redirectNow(url);
-        }
-      });
-  }
-
-  function redirectNow(url) {
-    if (redirected) return;
-    redirected = true;
-    if (subtitleEl) subtitleEl.textContent = "Tunnel ready. Redirecting...";
-    window.location.replace(url);
+  if (tunnelUrl) {
+    showReady(tunnelUrl);
   }
 
   function poll() {
@@ -183,7 +169,7 @@
     }
 
     attempts++;
-    if (attempts > 10 && subtitleEl) {
+    if (attempts > 10 && subtitleEl && !ready) {
       subtitleEl.textContent = "Taking a moment longer than usual...";
     }
 
@@ -192,7 +178,7 @@
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.url && data.status === "running") {
-          queueRedirect(data.url);
+          showReady(data.url);
         } else {
           setTimeout(poll, 2000);
         }
