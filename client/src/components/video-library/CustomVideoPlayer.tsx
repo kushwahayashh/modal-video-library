@@ -7,7 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
-import { Play, Pause, Maximize, Minimize, Gauge } from "lucide-react";
+import { IconPlayerPlayFilled, IconPlayerPauseFilled, IconMaximize, IconMinimize, IconGauge, IconPlayerTrackPrevFilled, IconPlayerTrackNextFilled, IconVolume, IconVolume2, IconVolumeOff } from "@tabler/icons-react";
 import { useVideoPlayer, type SpriteCue } from "../../hooks/useVideoPlayer";
 
 interface CustomVideoPlayerProps {
@@ -50,45 +50,7 @@ function FillModeIcon({ fill, size }: { fill: boolean; size: number }) {
   );
 }
 
-function SeekStepIcon({ direction, size }: { direction: "backward" | "forward"; size: number }) {
-  const isForward = direction === "forward";
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-      {isForward ? (
-        <>
-          <polygon points="6.4,6 12.2,12 6.4,18" fill="currentColor" />
-          <polygon points="12.4,6 18.2,12 12.4,18" fill="currentColor" />
-          <rect x="19.1" y="6.4" width="1.9" height="11.2" rx="0.95" fill="currentColor" />
-        </>
-      ) : (
-        <>
-          <polygon points="17.6,6 11.8,12 17.6,18" fill="currentColor" />
-          <polygon points="11.6,6 5.8,12 11.6,18" fill="currentColor" />
-          <rect x="3" y="6.4" width="1.9" height="11.2" rx="0.95" fill="currentColor" />
-        </>
-      )}
-    </svg>
-  );
-}
 
-function VolumeGlyph({ level, size }: { level: 0 | 1 | 2; size: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M3 10h4.3L12 6v12l-4.7-4H3z" fill="currentColor" />
-      {level === 0 ? (
-        <>
-          <rect x="14.6" y="8" width="2.1" height="8.6" rx="1.05" transform="rotate(45 15.65 12.3)" fill="currentColor" />
-          <rect x="14.6" y="8" width="2.1" height="8.6" rx="1.05" transform="rotate(-45 15.65 12.3)" fill="currentColor" />
-        </>
-      ) : (
-        <>
-          <rect x="15" y="9.1" width="2.1" height="5.8" rx="1.05" fill="currentColor" />
-          {level === 2 && <rect x="18" y="7.1" width="2.1" height="9.8" rx="1.05" fill="currentColor" />}
-        </>
-      )}
-    </svg>
-  );
-}
 
 function formatTime(seconds: number): string {
   if (!isFinite(seconds) || seconds < 0) return "0:00";
@@ -354,9 +316,9 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
       </video>
 
       {!playing && (
-        <button className="vp-big-play" onClick={togglePlay} aria-label="Play">
-          <Play size={BIG_PLAY_ICON_SIZE} fill="currentColor" strokeWidth={0} />
-        </button>
+      <button className="vp-big-play" onClick={togglePlay} aria-label="Play">
+          <IconPlayerPlayFilled size={BIG_PLAY_ICON_SIZE} fill="currentColor" strokeWidth={0} />
+      </button>
       )}
 
       <div
@@ -408,20 +370,24 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
         <div className="vp-controls-row">
           <div className="vp-controls-left">
             <button className="vp-btn" onClick={togglePlay} aria-label={playing ? "Pause" : "Play"}>
-              {playing ? <Pause size={CONTROL_ICON_SIZE} fill="currentColor" strokeWidth={0} /> : <Play size={CONTROL_ICON_SIZE} fill="currentColor" strokeWidth={0} />}
+              {playing ? (
+                <IconPlayerPauseFilled size={CONTROL_ICON_SIZE} fill="currentColor" strokeWidth={0} />
+              ) : (
+                <IconPlayerPlayFilled size={CONTROL_ICON_SIZE} fill="currentColor" strokeWidth={0} />
+              )}
             </button>
 
             <button className="vp-btn" onClick={() => handleSeekStep(-5)} aria-label="Seek backward 5 seconds" title="Back 5 seconds">
-              <SeekStepIcon direction="backward" size={CONTROL_ICON_SIZE - 1} />
+              <IconPlayerTrackPrevFilled size={CONTROL_ICON_SIZE} />
             </button>
 
             <button className="vp-btn" onClick={() => handleSeekStep(5)} aria-label="Seek forward 5 seconds" title="Forward 5 seconds">
-              <SeekStepIcon direction="forward" size={CONTROL_ICON_SIZE - 1} />
+              <IconPlayerTrackNextFilled size={CONTROL_ICON_SIZE} />
             </button>
 
             <div className="vp-volume-group" onWheel={handleVolumeWheel}>
               <button className="vp-btn" onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"}>
-                <VolumeGlyph level={volumeLevel} size={CONTROL_ICON_SIZE - 1} />
+                {volumeLevel === 0 ? <IconVolumeOff size={CONTROL_ICON_SIZE} /> : volumeLevel === 1 ? <IconVolume size={CONTROL_ICON_SIZE} /> : <IconVolume2 size={CONTROL_ICON_SIZE} />}
               </button>
               <div
                 className="vp-volume-slider-wrap"
@@ -464,7 +430,7 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
                 aria-label={`Playback speed ${playbackRate}x`}
                 title={`Playback speed ${playbackRate}x`}
               >
-                <Gauge size={CONTROL_ICON_SIZE - 2} />
+                <IconGauge size={CONTROL_ICON_SIZE - 2} />
               </button>
               {showSpeedMenu && (
                 <div className="vp-speed-menu">
@@ -495,7 +461,11 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
             </button>
 
             <button className="vp-btn" onClick={toggleFullscreen} aria-label="Fullscreen">
-              {isFullscreen ? <Minimize size={CONTROL_ICON_SIZE} /> : <Maximize size={CONTROL_ICON_SIZE} />}
+              {isFullscreen ? (
+                <IconMinimize size={CONTROL_ICON_SIZE} />
+              ) : (
+                <IconMaximize size={CONTROL_ICON_SIZE} />
+              )}
             </button>
           </div>
         </div>

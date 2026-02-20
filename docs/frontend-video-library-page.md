@@ -1,73 +1,77 @@
 # Frontend Video Library Page (`client/src/App.tsx`)
 
-## Main Responsibilities
-- Fetch and render library grid.
-- Open video player modal with Plyr.
-- Show per-item context menu actions.
-- Handle rename/delete/properties/thumbnail actions via modal dialogs.
-- Trigger sprite generation and display in-progress toast.
+## Responsibilities
 
-## Internal Components
-- `ContextMenu`: right-click action menu with viewport clamping and outside-click close behavior.
-- `VideoCard`: lazy thumbnail loading with intersection observer and stable placeholder fallback.
-- `ThumbnailPicker`: extracted thumbnail chooser used by the thumbnail action modal, including skeleton states and per-image fade-in.
+- Display searchable video library.
+- Open custom video player modal for playback.
+- Show contextual actions (download, copy link, rename, delete, properties, sprites, thumbnail).
+- Track active sprite generation jobs.
+- Handle empty/error/loading states and user feedback via toasts.
 
-## Local State Summary
-- Data and loading: `videos`, `loading`.
-- Playback: `selectedVideo`, `modalVisible`, `videoRef`, `playerRef`.
-- Search: `search`.
-- Context menu: `contextMenu`.
-- Action modals: `actionModal`, `actionModalClosing`, `actionVideo`, `renameValue`, `actionLoading`.
-- Properties: `videoProps`.
-- Sprite status: `activeSpriteJobs` (via `useSpriteProgress` hook).
-- Thumbnail sources: `placeholderImages`, `thumbnailOverrides`, `placeholdersLoading`.
+## Core State Groups
 
-## Data Fetching
-- On mount:
-  - Fetch `/api/placeholder-images`.
-  - Fetch `/api/thumbnail-map`.
-- Video list refresh via `fetchVideos()` calling `/api/videos`.
-- Properties modal fetches `/api/videos/:id` lazily.
+- Playback: `selectedVideo`, `modalVisible`
+- Search: `search`, `debouncedSearch`
+- Action dialogs: `actionModal`, `actionModalClosing`, `actionVideo`, `renameValue`, `videoProps`, `actionLoading`
+- Processes dialog: `processesModalOpen`
+- Data layer (from `useVideoLibraryData`):
+  - `videos`, `loading`, `loadingMore`, `hasMore`, `videosError`
+  - `placeholderImages`, `placeholdersLoading`
+  - `thumbnailOverrides`
 
-## User Actions
-- `Play`: open modal, initialize Plyr instance.
-- `Download`: open `/api/stream/:id?download=1`.
-- `Copy Link`: copy direct stream URL.
-- `Rename`: `POST /api/videos/:id/rename`.
-- `Delete`: `DELETE /api/videos/:id`.
-- `Generate Sprites`: `POST /api/videos/:id/sprites`.
-- `Change Thumbnail`: save selection to `/api/thumbnail-map`.
+## Data and Refresh Flow
 
-## Sprite Integration
-- Uses `useSpriteProgress` hook to poll `/api/sprites/progress` every second.
-- Displays extraction/tiling status for all active jobs (not just one).
-- Refreshes video list after each job settlement.
-- On playback, enables Plyr preview thumbnails if `hasSprites` is true.
+1. `useVideoLibraryData` loads placeholder images + thumbnail map on mount.
+2. `fetchVideosPage(true)` loads first page with optional debounced `q` search.
+3. `VirtualizedVideoGrid` requests more pages as viewport nears content bottom.
+4. Failures are shown as either:
+   - full-page error (if no data loaded)
+   - non-blocking retry banner (if old data exists)
 
-## Thumbnail Picker Behavior
-- Thumbnail action modal renders `ThumbnailPicker` with three states:
-  - Global loading skeleton tiles while placeholder list is loading.
-  - Empty state when no placeholder images are available.
-  - Interactive image grid with per-image skeleton until each image load completes.
-- Selected thumbnail is persisted through `POST /api/thumbnail-map`.
+## Search Behavior
 
-## User Feedback
-- Replaces blocking `alert` calls with in-app toast notifications.
-- Uses success toasts for copy-link and sprite start/complete events.
-- Uses error toasts for failed operations.
+- Input changes are debounced (~180ms).
+- Search query is trimmed and sent as `q` to `/api/videos`.
+- Empty results with active query show a dedicated “No results” state.
 
-## Player Lifecycle
-- Plyr is created once when modal opens and ref exists.
-- Thumbnail track element is appended when sprite metadata exists.
-- ESC key closes action modals first, then video player modal.
-- Player destroyed on close transition completion (race-safe via `closeTimerRef`).
+## Context Menu Actions
 
-## Modal Animations
-- Action modals use CSS animation-based fade-in/fade-out with `onAnimationEnd` for cleanup (no timers).
-- Video player modal uses CSS transition-based open/close with race-safe timer cleanup via `closeTimerRef`.
-- Search shows a "no results" empty state when filtering produces zero matches.
+- `play`: opens player modal
+- `download`: opens `/api/stream/:id?download=1`
+- `copy-link`: copies direct stream URL to clipboard
+- `rename`: opens rename dialog, posts `/api/videos/:id/rename`
+- `info`: opens properties dialog, loads `/api/videos/:id`
+- `sprites`: posts `/api/videos/:id/sprites`
+- `thumbnail`: opens thumbnail picker, posts `/api/thumbnail-map`
+- `delete`: sends `DELETE /api/videos/:id`
 
-## Error Handling
-- Uses fallback empty states on fetch failures.
-- Uses toast notifications for operation failures (rename/delete/sprite).
-- Defensive catch blocks avoid app crashes on background polling errors.
+## Sprite Job UX
+
+- `useSpriteProgress` polls `/api/sprites/progress` every second.
+- Navbar shows `Processes` button with active job count when running jobs exist.
+- `ProcessesModal` displays per-job status and extraction progress.
+- On settled jobs:
+  - `done`: success toast + mark `hasSprites: true`
+  - `error`: error toast
+
+## Player Modal and Preloading
+
+- Opening modal sets selected video, then toggles visible state for transition.
+- If selected video already has sprites, app prefetches VTT and sprite image.
+- Closing modal is transition-safe via `closeTimerRef` cleanup.
+- ESC handling priority:
+  1. close processes modal
+  2. close action modal
+  3. close player modal
+
+## Accessibility and Interaction
+
+- Modals use focus trap hook (`useDialogFocusTrap`).
+- Global scroll is locked while any modal is open.
+- Context menu supports keyboard navigation and focus management.
+
+## User Feedback Model
+
+- Non-blocking toasts replace alert-driven UX.
+- Success toasts: rename, delete, copy link, sprite start/completion, thumbnail update.
+- Error toasts: API failures and sprite failures.

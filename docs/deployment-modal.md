@@ -1,48 +1,66 @@
 # Deployment on Modal (`app.py`)
 
 ## Modal Objects
-- App name: `video-library`.
-- Volume: `video-library-data` mounted at `/data`.
-- Dict: `cf-url-store` storing active tunnel URL.
 
-## Container Image Definition
-- Base: `modal.Image.debian_slim()`.
-- APT installs:
-  - ffmpeg, aria2, curl, unzip, mediainfo, imagemagick, libmagic1, wget
-- Tool installs via commands:
-  - Node.js 22
-  - global CLIs: `@openai/codex`, `@qwen-code/qwen-code`
-  - Bun and symlinks (`bun`, `bunx`)
-  - `yt-dlp`
-  - `cloudflared`
-- Pip installs:
-  - gallery-dl, ffmpeg-python, python-magic, Pillow, mutagen, fastapi[standard]
+- App name: `luna`
+- Volume: `video-library-data` mounted at `/data`
+- Dict: `cf-url-store` for runtime URL/status/heartbeat state
 
-## Layering and Build Caching
-- Package files copied first for dependency cache stability.
-- `bun install` runs in image build for both `server` and `client`.
-- Source directories copied after dependency layers.
+## Image Build Definition
 
-## `run()` Function Lifecycle
-1. Ensure `/data` runtime directories exist.
-2. Start cloudflared tunnel subprocess and parse trycloudflare URL.
-3. Build React client in parallel thread.
-4. Start backend server after build success.
-5. Wait for `/api/health` readiness.
-6. Post tunnel URL to backend `/api/cf-url`.
-7. Keep process alive while tunnel and server stay alive.
-8. Terminate child processes on exit.
+Base image: `modal.Image.debian_slim()`
 
-## Exposed FastAPI Endpoints
-- `get_cf_url()`:
-  - Redirects to current tunnel URL if available.
-- `cf_url_json()`:
-  - Returns `{ url }` JSON if set.
+Installs:
+
+- APT: `ffmpeg`, `aria2`, `curl`, `unzip`, `mediainfo`, `imagemagick`, `libmagic1`, `wget`
+- Node.js 22 + global CLIs: `@openai/codex`, `@qwen-code/qwen-code`
+- Bun (`bun`, `bunx` symlinked into `/usr/local/bin`)
+- `yt-dlp`
+- `cloudflared`
+- Python packages: `gallery-dl`, `ffmpeg-python`, `python-magic`, `Pillow`, `mutagen`, `fastapi[standard]`
+
+Build caching strategy:
+
+1. Copy package manifests/config first.
+2. Run `bun install` for server and client.
+3. Copy source code and static assets afterward.
+
+## `run()` Runtime Lifecycle
+
+1. Reset runtime state in `cf-url-store` (`status=starting`, heartbeat).
+2. Ensure `/data` directories exist.
+3. Start Cloudflare tunnel subprocess and capture first `trycloudflare.com` URL.
+4. Build client (`bun run build`) in parallel thread.
+5. Start backend (`bun run start`) once build succeeds.
+6. Wait for backend health (`/api/health`).
+7. Post tunnel URL to backend (`POST /api/cf-url`).
+8. Keep heartbeat updated while processes are alive.
+9. Idle watchdog polls `/api/runtime/status` and stops app after 2h idle.
+10. On exit, terminate child processes and clear URL/heartbeat state.
+
+## Launch Endpoint (`@modal.fastapi_endpoint`)
+
+Function: `launch(fmt: str = "")`
+
+- Returns redirect HTML immediately for browser clients.
+- HTML polls `?fmt=json` until app reaches running state and tunnel URL is ready.
+- Returns `202` JSON during startup.
+- Handles stale launch locks and failed prior runs.
+- Spawns `run` only when no active run heartbeat is detected.
 
 ## Local Entrypoint
-- `main()` calls `run.remote()`.
 
-## Failure Modes to Watch
-- Client build failures abort startup.
-- Health check timeout aborts startup.
-- Tunnel URL may be unset if cloudflared logs never include expected pattern.
+`@app.local_entrypoint` -> `main()` calls `run.remote()`.
+
+Command:
+
+```bash
+modal run app.py
+```
+
+## Failure Modes
+
+- Client build failure aborts startup.
+- Backend health timeout marks runtime as failed.
+- Tunnel URL capture may fail if cloudflared output format changes.
+- Temporary status probe failures during idle checks are tolerated (loop continues).

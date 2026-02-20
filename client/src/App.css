@@ -14,7 +14,7 @@
   position: fixed;
   top: 0;
   left: 0;
-  right: 0;
+  right: var(--scroll-lock-offset, 0px);
   z-index: 100;
   background: var(--overlay-nav);
   backdrop-filter: blur(20px);

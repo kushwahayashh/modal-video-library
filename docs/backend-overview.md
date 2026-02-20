@@ -1,59 +1,83 @@
 # Backend Overview
 
-## Files
-- Server entrypoint: `server/src/index.js`
-- Package metadata: `server/package.json`
-- Standalone terminal UI: `server/src/terminal.html`
+## Main Files
 
-## Boot Sequence (`server/src/index.js`)
-1. Creates Fastify app with CORS and WebSocket plugins.
-2. Attempts to serve built frontend from `client/dist`.
-3. Initializes `DATA_DIR` subfolders if possible.
-4. Exposes placeholder images from `images/` under `/api/placeholder-images/`.
-5. Registers HTTP and WebSocket routes.
-6. Starts listener on `0.0.0.0:${PORT}` where `PORT` defaults to `3000`.
+- Entrypoint: `server/src/index.js`
+- Utilities/services:
+  - `server/src/lib/files.js`
+  - `server/src/lib/http-range.js`
+  - `server/src/lib/sprite-generation.js`
+  - `server/src/lib/thumb-map.js`
+  - `server/src/lib/video-added-map.js`
+  - `server/src/lib/video-utils.js`
+- Standalone terminal page: `server/src/terminal.html`
 
-## Startup/Testability Controls
-- `NO_AUTO_LISTEN=1` prevents automatic `app.listen(...)` so route contracts can be tested via `app.inject`.
-- `app` is exported from `server/src/index.js` for contract test usage.
+## Boot Sequence
 
-## Core Helpers
-- `toBase64Url()` and `fromBase64Url()`: map relative file paths to URL-safe IDs.
-- `fileExists()`: async path existence check.
-- `getVideoDuration()`: ffprobe duration extraction with path+mtime cache and bounded LRU-style eviction.
-- `getVideoMetadata()`: ffprobe stream/format metadata extraction.
-- `formatBytes()`, `formatBitrate()`, `formatChannels()`: backend formatting helpers.
+1. Create Fastify app (`maxParamLength: 500`), register CORS + WebSocket.
+2. Attempt static serving of `client/dist` (non-fatal if absent).
+3. Resolve runtime directories (`DATA_DIR`, `videos`, `sprites`, placeholders dir).
+4. Register placeholder static serving at `/api/placeholder-images/`.
+5. Initialize JSON map stores (`thumbnail-map.json`, `video-added-map.json`).
+6. Initialize sprite service (`spriteJobs` map + generator).
+7. Register HTTP and WS routes.
+8. Start listener unless `NO_AUTO_LISTEN=1`.
 
-## Sprite Pipeline
-- Job state stored in `spriteJobs` map keyed by video ID.
-- Steps:
-  - Reset sprite directory.
-  - Probe duration and compute extraction interval.
-  - Split extraction into multiple ffmpeg workers based on CPU count.
-  - Merge extracted segment frames into global sequence.
-  - Tile frames into `sprite.jpg`.
-  - Generate `sprite.vtt` with `xywh` coordinates.
-- Job retention:
-  - Job removed 10 seconds after completion/failure.
+## Runtime State
 
-## File and Stream Handling
-- Video list from `/data/videos` scanned recursively (including subfolders) and filtered by extension.
-- Stream route supports:
-  - Download mode with `Content-Disposition`.
-  - HTTP byte-range partial content for playback.
-- Video rename/delete routes also maintain sprite assets and thumbnail-map consistency.
+- `cloudflareUrl`: set through `POST /api/cf-url`.
+- `lastActivityAt`: updated by request hook and terminal events.
+- `terminalConnectionCount`: incremented/decremented by WS terminal lifecycle.
+- `spriteJobs`: in-memory job state for sprite generation.
 
-## Terminal WebSocket Backend
-- Route: `/ws/terminal`.
-- Spawns shell with Bun terminal API and `TERM=xterm-256color`.
-- Handles messages:
-  - `input`: writes to terminal stdin.
-  - `resize`: updates pseudo-terminal dimensions.
-  - `ping`: responds with `pong`.
-- Emits messages:
-  - `output`, `exit`, `error`.
+## Filesystem Persistence
 
-## Static and Fallback Routing
-- `/terminal` serves raw `server/src/terminal.html`.
-- API and WS unknown routes return JSON 404.
-- Other unknown routes fallback to SPA `index.html` if build exists.
+- Thumbnail map store and video-added map store both:
+  - serialize updates through an internal promise queue
+  - write atomically via temporary file + rename
+  - guard against malformed/non-object JSON
+
+## Video List Pipeline (`GET /api/videos`)
+
+- Recursively reads `VIDEOS_DIR`.
+- Filters by known video extensions.
+- Computes duration using `ffprobe` with LRU-like duration cache.
+- Resolves stable `videoId` from relative path.
+- Resolves `addedAt` from map or filesystem fallback.
+- Resolves thumbnail from saved map or deterministic placeholder hash.
+- Persists auto-assigned placeholders and `addedAt` map corrections.
+- Supports `q`, `offset`, `limit` with bounded page size (`<=200`).
+
+## Rename/Delete Side Effects
+
+- Rename:
+  - keeps extension and subfolder
+  - sanitizes invalid filename characters
+  - moves sprite folder to new ID
+  - rewrites sprite VTT URLs to new ID
+  - remaps both `thumbnail-map` and `video-added-map` keys
+- Delete:
+  - removes video file and sprite folder
+  - removes map entries
+  - drops active sprite job entry
+
+## Streaming and Range Handling
+
+- `/api/stream/:id` supports:
+  - attachment mode (`?download=1`)
+  - RFC-style byte range responses (`206`)
+  - invalid range response (`416` + `Content-Range: bytes */<size>`)
+
+## Terminal WebSocket
+
+- Route: `GET /ws/terminal` (upgrade).
+- Spawns shell using Bun terminal API (`TERM=xterm-256color`).
+- Handles messages: `input`, `resize`, `ping`.
+- Emits: `output`, `pong`, `exit`, `error`.
+- CWD prefers `DATA_DIR` if present.
+
+## Routing/Fallback Rules
+
+- `/terminal` serves `server/src/terminal.html`.
+- Unknown `/api/*` and `/ws/*` routes return JSON 404.
+- Other unknown routes attempt to serve SPA `index.html` from `client/dist`.

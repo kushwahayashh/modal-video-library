@@ -1,62 +1,69 @@
 # Architecture
 
 ## High-Level Components
-- Frontend web app: `client/` (React + Vite + TypeScript).
-- Backend API server: `server/src/index.js` (Bun + Fastify + WebSocket).
-- Local launcher: `main.py`.
-- Modal launcher and image definition: `app.py`.
-- Static image assets: `images/`.
+
+- Frontend SPA: `client/` (React + Vite + TypeScript)
+- Backend API + WS: `server/src/index.js` (Bun + Fastify)
+- Local launcher: `main.py`
+- Modal launcher/runtime control: `app.py`
+- Placeholder assets: `images/`
 
 ## Runtime Topology
-- Browser talks to backend via:
-  - HTTP for metadata, streaming, sprites, and placeholder images.
-  - WebSocket for interactive terminal I/O.
-- Backend serves built frontend (`client/dist`) when present.
-- Backend reads/writes media data under `DATA_DIR` (default `/data`).
-- Modal run mounts persistent volume at `/data`.
 
-## Data Directories
-- `/data/videos`: source video files.
-- `/data/thumbnails`: reserved for thumbnail assets.
-- `/data/sprites`: generated sprite sheets and VTT files.
-- `/data/db`: reserved for DB files.
-- `/data/thumbnail-map.json`: frontend-selected thumbnail overrides.
+- Browser <-> backend over HTTP for library, streaming, sprites, and metadata writes.
+- Browser <-> backend over WebSocket for terminal I/O (`/ws/terminal`).
+- Backend serves `client/dist` when available and falls back to SPA `index.html` for non-API routes.
+- Backend reads/writes under `DATA_DIR` (default `/data`).
 
-## Identifier and Path Strategy
-- Video IDs are base64url-encoded relative paths (e.g., `subfolder/video.mp4` for nested files).
-- Sprite output paths are keyed by video ID.
+## Persistent Data Model
 
-## Core Flows
+`DATA_DIR` contains:
 
-### Video Library Load
-1. Frontend fetches `/api/videos`.
-2. Backend recursively scans `/data/videos` (including subfolders), computes size, created time, duration, sprite availability.
-3. Frontend renders cards and fetches placeholder + thumbnail map.
+- `videos/`: source media (subdirectories supported)
+- `sprites/<videoId>/`: generated `sprite.jpg` and `sprite.vtt`
+- `thumbnail-map.json`: selected thumbnail URL by `videoId`
+- `video-added-map.json`: stable `addedAt` timestamp by `videoId`
+
+Video IDs are base64url-encoded relative file paths (for example: `sub/clip.mp4`).
+
+## Request and Processing Flows
+
+### Library Load + Infinite Scroll
+
+1. Frontend loads placeholders + thumbnail overrides.
+2. Frontend requests `GET /api/videos?offset=<n>&limit=<m>&q=<optional>`.
+3. Backend recursively scans `videos/`, computes metadata, applies stable placeholders, and sorts by `addedAt` descending.
+4. Frontend appends pages and renders a virtualized grid.
+
+### Thumbnail Assignment
+
+1. Backend auto-assigns deterministic placeholders when no override exists.
+2. Auto-assigned values are persisted to `thumbnail-map.json`.
+3. User-selected thumbnail updates are written through `POST /api/thumbnail-map`.
 
 ### Playback
-1. User opens modal in UI.
-2. Player loads `/api/stream/:id`.
-3. Backend serves ranged streaming with MIME detection.
-4. If sprites exist, Plyr loads `/api/sprites/:id/vtt` and image references.
+
+1. User opens modal player.
+2. Player streams `/api/stream/:id` with range requests.
+3. If sprites exist, player loads `/api/sprites/:id/vtt` and `/api/sprites/:id/image` for timeline preview.
 
 ### Sprite Generation
-1. Frontend calls `POST /api/videos/:id/sprites`.
-2. Backend launches async ffmpeg pipeline with progress tracked in-memory map.
-3. Frontend polls `/api/sprites/progress` each second.
-4. Backend publishes `sprite.jpg` and `sprite.vtt` under `/data/sprites/:id/`.
 
-### Terminal
-1. Browser opens `/terminal` and connects to `/ws/terminal`.
-2. Backend spawns shell (`$SHELL` or `/bin/bash`) using Bun pseudo-terminal support.
-3. Input/output frames are exchanged as JSON messages.
+1. Frontend triggers `POST /api/videos/:id/sprites`.
+2. Backend creates an in-memory job, extracts frames with parallel ffmpeg workers, builds tiled sprite + VTT.
+3. Frontend polls `/api/sprites/progress` and updates process UI.
+4. Jobs are removed shortly after completion/failure (ephemeral runtime state).
 
-### Modal Cloud URL Registration
-1. `app.py` starts cloudflared tunnel process.
-2. Extracted `*.trycloudflare.com` URL is stored in Modal Dict.
-3. URL is posted to backend via `POST /api/cf-url` for app-level awareness.
+### Modal Launch + Tunnel
 
-## Architectural Characteristics
-- Single-process backend with async route handlers.
-- No DB currently used for metadata; filesystem is source of truth.
-- Thumbnail override map is persisted as JSON file.
-- Sprite jobs are ephemeral and in-memory; progress disappears after process restart.
+1. `app.py` run lifecycle starts Cloudflare tunnel and backend.
+2. Tunnel URL is stored in Modal Dict and posted to backend `POST /api/cf-url`.
+3. FastAPI launch endpoint (`launch`) returns a redirect page that polls until tunnel is ready.
+4. Idle watchdog stops runtime when no terminal sessions, no active sprite jobs, and no user activity for 2 hours.
+
+## Architecture Characteristics
+
+- Filesystem is source of truth for video library state.
+- JSON map stores are atomically written and serialized through queued operations.
+- API server is single-process with async handlers.
+- Sprite progress and terminal session count are process-local runtime state.

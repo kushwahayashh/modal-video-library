@@ -1,113 +1,114 @@
-# Video Library
+# LUNA Video Library
 
-A self-hosted video library app that runs locally or on Modal with a Cloudflare tunnel.
+Self-hosted video library for local or Modal runtime.
 
-## Tech Stack
+## What the app does
 
-- **Frontend:** React + Vite + TypeScript
-- **Backend:** Bun + Fastify
-- **Entry Point:** Python (for Modal compatibility)
-- **Tools:** ffmpeg, yt-dlp, aria2c, mediainfo, gallery-dl, cloudflared
+- Scans videos recursively from `DATA_DIR/videos` and serves a searchable library UI.
+- Streams videos with HTTP range support (`/api/stream/:id`).
+- Generates and serves seek-preview sprites (`sprite.jpg` + `sprite.vtt`).
+- Persists deterministic thumbnail selections (`thumbnail-map.json`).
+- Tracks stable library ordering with `addedAt` metadata (`video-added-map.json`).
+- Includes a browser terminal connected to a backend shell over WebSocket.
 
-## Project Structure
+## Stack
 
-```
-├── main.py           # Local entry point
-├── app.py            # Modal entry point (image + cloudflare tunnel)
-├── server/           # Bun + Fastify backend
-│   ├── package.json
-│   └── src/
-│       ├── index.js
-│       └── lib/      # Backend service modules
-└── client/           # React + Vite frontend
-    ├── package.json
-    └── src/
-        ├── App.tsx
-        ├── types.ts
-        ├── utils.ts
-        ├── hooks/
-        │   └── useSpriteProgress.ts
-        └── components/
-            ├── ThumbnailPicker.tsx
-            ├── ToastProvider.tsx
-            ├── ToastStack.tsx
-            └── video-library/
-                ├── ContextMenu.tsx
-                ├── VideoCard.tsx
-                ├── VideoPlayerModal.tsx
-                ├── VideoActionModal.tsx
-                ├── helpers.ts
-                └── types.ts
+- Frontend: React 18 + TypeScript + Vite
+- Backend: Bun + Fastify + Fastify WebSocket
+- Runtime launcher: Python (`main.py`) and Modal (`app.py`)
+- Media tooling: `ffmpeg`, `ffprobe`
+
+## Project layout
+
+```text
+.
+├── main.py                     # Local launcher (install/build/start)
+├── app.py                      # Modal image + launch/run lifecycle
+├── server/
+│   ├── src/index.js            # Fastify routes + WebSocket terminal
+│   ├── src/lib/                # Sprite, file, metadata, map helpers
+│   └── tests/                  # Contract + unit tests
+├── client/
+│   ├── src/App.tsx             # Video library page orchestration
+│   ├── src/components/         # Modals, cards, context menu, player
+│   └── src/hooks/              # Data/polling/player/state hooks
+├── images/                     # Placeholder images served by backend
+└── docs/                       # Architecture/API/runtime documentation
 ```
 
-## Running Locally
+## Quick start
+
+### Run locally
 
 ```bash
 python main.py
-# Visit http://localhost:3000
 ```
 
-First run will install dependencies and build the client automatically.
+Opens backend at `http://localhost:3000` (and serves built frontend from `client/dist`).
 
-## Running on Modal
+### Run frontend/backend separately (dev)
+
+```bash
+# terminal 1
+cd server && bun install && bun run start
+
+# terminal 2
+cd client && bun install && bun run dev
+```
+
+Frontend dev server: `http://localhost:5173` (proxying `/api` to backend).
+
+### Run on Modal
 
 ```bash
 modal run app.py
 ```
 
-This will:
-1. Use pre-built image with all dependencies (fast!)
-2. Build the React client
-3. Start the Fastify server
-4. Create a Cloudflare tunnel
-5. Output a public URL (e.g., `https://xxx.trycloudflare.com`)
+`app.py` builds the client, starts backend + Cloudflare tunnel, and auto-stops after prolonged inactivity.
 
-**Note:** The URL only works while the container is running. Each run generates a new URL.
+## Data layout
 
-### Cold Start Performance
+Default `DATA_DIR` is `/data`.
 
-- **First run:** Image builds with deps (~2-3 min, cached forever)
-- **Subsequent runs:** ~5-7 seconds (build client + start server)
-
-## Modal Volume
-
-Videos and data are stored in a persistent Modal Volume (`video-library-data`):
-
-```
+```text
 /data
-├── videos/       # Downloaded videos
-├── thumbnails/   # Generated thumbnails
-├── sprites/      # Sprite sheets + VTT files
-└── db/           # SQLite database
+├── videos/                 # Source videos (nested folders supported)
+├── sprites/                # Generated sprite artifacts per video ID
+├── thumbnail-map.json      # videoId -> thumbnail URL
+└── video-added-map.json    # videoId -> stable addedAt timestamp
 ```
 
-## Development
+## Key routes
 
-For frontend hot-reload during development:
+- `GET /api/videos` with `q`, `offset`, `limit` pagination/search
+- `GET /api/videos/:id` video properties + metadata
+- `POST /api/videos/:id/rename`
+- `DELETE /api/videos/:id`
+- `POST /api/videos/:id/sprites`
+- `GET /api/sprites/progress`
+- `GET /api/stream/:id` (or `?download=1`)
+- `GET /ws/terminal` (WebSocket)
+
+Full reference: `docs/backend-api.md`.
+
+## Environment variables
+
+- `DATA_DIR`: media + metadata root (default `/data`)
+- `PLACEHOLDERS_DIR`: placeholder image folder (default `images/`)
+- `VIDEO_SCAN_CONCURRENCY`: concurrent stat/metadata workers for `/api/videos` (default `6`, max `16`)
+- `PORT`: backend port (default `3000`)
+- `SHELL`: shell used by `/ws/terminal`
+- `NO_AUTO_LISTEN=1`: disables `listen()` for tests
+
+## Testing
 
 ```bash
-# Terminal 1: Start backend
-cd server && bun install && bun run start
-
-# Terminal 2: Start frontend dev server
-cd client && bun install && bun run dev
-# Visit http://localhost:5173
+cd server && bun run test
 ```
 
-## Features
+## Documentation
 
-- [x] Video library browsing
-- [x] Video streaming/playback (Plyr)
-- [x] Search
-- [x] Context menu (play, download, copy link, rename, delete, properties, thumbnails, sprites)
-- [x] Sprite generation (preview thumbnails on seek bar)
-  - Parallel ffmpeg frame extraction across CPU cores
-  - Real-time progress tracking (persists across page refresh)
-  - Plyr preview thumbnails via WebVTT
-- [x] Processes modal for active background jobs (sprite extraction/tiling progress)
-- [x] Toast notification system
-- [x] Web terminal
-- [ ] Video downloading (yt-dlp, aria2c)
-- [x] Metadata extraction (video properties modal)
-- [x] Thumbnail selection for library grid
-- [ ] Tags and categories
+- `docs/README.md` documentation index
+- `docs/runtime-and-operations.md` runbooks and operational behavior
+- `docs/architecture.md` system architecture and request flows
+- `docs/frontend-overview.md` and `docs/backend-overview.md` implementation maps

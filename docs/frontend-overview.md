@@ -1,41 +1,78 @@
 # Frontend Overview
 
 ## Stack
-- React 18
-- TypeScript
-- React Router
+
+- React 18 + TypeScript
+- React Router (`/` route)
 - Vite
-- Lucide React icons
-- Plyr media player
+- Lucide + Tabler icons
 
-## Entry and Routing
+## Entry and Composition
+
 - Entry: `client/src/main.tsx`
-- Routes:
-  - `/` -> `App` (`client/src/App.tsx`)
+- Root tree:
+  - `BrowserRouter`
+  - `ToastProvider`
+  - `Routes` -> `App`
+  - `ToastStack`
 
-## Source File Responsibilities
-- `client/src/App.tsx`: video library page orchestration, modal routing, and action wiring.
-- `client/src/components/ThumbnailPicker.tsx`: thumbnail selection grid with skeleton loading and image-level load state.
-- `client/src/components/ToastProvider.tsx`: global toast context and `useToast` hook.
-- `client/src/components/ToastStack.tsx`: toast notification stack renderer with status/error/success variants.
-- `client/src/components/ToastStack.css`: toast notification styling.
-- `client/src/components/video-library/ContextMenu.tsx`: right-click context menu with viewport clamping and keyboard/scroll close.
-- `client/src/components/video-library/VideoCard.tsx`: video card with lazy thumbnail loading via intersection observer.
-- `client/src/components/video-library/VideoPlayerModal.tsx`: video player modal overlay with Plyr integration.
-- `client/src/components/video-library/VideoActionModal.tsx`: action modal for rename, delete, properties, and thumbnail operations with fade-out animation.
-- `client/src/components/video-library/helpers.ts`: stable placeholder hash and thumbnail save helper.
-- `client/src/components/video-library/types.ts`: shared types for context menu, action modal, and video properties.
-- `client/src/hooks/useSpriteProgress.ts`: sprite progress polling hook with job-settled callback.
-- `client/src/utils.ts`: formatting helpers.
-- `client/src/types.ts`: shared type definitions.
-- `client/src/index.css`: design tokens and global styles.
-- `client/src/App.css`: styles for video library page and overlays.
+## Main Page (`client/src/App.tsx`)
 
-## Build and Dev
-- Dev server: `bun run dev` (port 5173).
-- Build output: `client/dist`.
-- Proxy: Vite forwards `/api/*` requests to `http://localhost:3000`.
+`App.tsx` orchestrates:
 
-## Data Contracts with Backend
-- `Video` interface mirrors `/api/videos` response shape.
-- Thumbnail overrides are read from and written to `/api/thumbnail-map`.
+- search input + debounced query
+- library data loading/pagination
+- virtualized video grid rendering
+- context menu actions
+- player modal, action modal, and processes modal
+- sprite job polling and completion notifications
+
+## Key Hooks
+
+- `useVideoLibraryData`:
+  - loads `/api/videos` pages
+  - handles `hasMore/loadingMore`
+  - loads placeholders and thumbnail map
+  - persists thumbnail overrides
+- `useContextMenuState`:
+  - context menu open/close/reopen timing and viewport-safe anchor positioning
+- `useSpriteProgress`:
+  - polls `/api/sprites/progress`
+  - emits settled jobs (`done`/`error`) once per started job
+- `useVideoPlayer`:
+  - custom player state/actions
+  - keyboard shortcuts
+  - sprite VTT parsing and cue lookup
+- `useDialogFocusTrap`:
+  - focus trapping and focus restoration for modal dialogs
+
+## Key Components
+
+- `VirtualizedVideoGrid`: absolute-positioned virtualized list with overscan and scroll-driven paging
+- `VideoCard`: lazy image loading + stable placeholder fallback
+- `ContextMenu`: keyboard-accessible action menu with close/open animation
+- `VideoPlayerModal`: modal container + sprite badge + custom player
+- `CustomVideoPlayer`: full custom controls, scrubbing, volume/speed/fullscreen, sprite hover preview
+- `VideoActionModal`: rename/delete/properties/thumbnail dialogs
+- `ProcessesModal`: active sprite jobs list/progress
+- `ThumbnailPicker`: image selection UI for thumbnail overrides
+- `ToastProvider` + `ToastStack`: global notification system
+
+## Data Contract Summary
+
+`Video` item fields (from `/api/videos`):
+
+- `id`, `title`, `filename`
+- `size`, `sizeBytes`
+- `createdAt`, `addedAt`
+- `thumbnail`
+- `duration`
+- `hasSprites`
+
+Properties modal extends this with `/api/videos/:id` metadata fields.
+
+## Dev and Build
+
+- Dev: `cd client && bun run dev` (`http://localhost:5173`)
+- Build: `cd client && bun run build` -> `client/dist`
+- API proxy: `/api` -> `http://localhost:3000` (configured in `client/vite.config.js`)

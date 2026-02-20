@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { FolderOpen, Search, SearchX } from "lucide-react";
+import { IconFolderOpen, IconSearch, IconSearchOff } from "@tabler/icons-react";
 import "./App.css";
 import type { Video } from "./types";
 import { useSpriteProgress, type SpriteProgressJob } from "./hooks/useSpriteProgress";
@@ -329,18 +329,35 @@ function App() {
     const { body, documentElement } = document;
     const previousBodyOverflow = body.style.overflow;
     const previousHtmlOverflow = documentElement.style.overflow;
+    const previousBodyPaddingRight = body.style.paddingRight;
+    const previousScrollLockOffset = documentElement.style.getPropertyValue("--scroll-lock-offset");
 
     if (hasOpenModal) {
+      const scrollbarWidth = Math.max(0, window.innerWidth - documentElement.clientWidth);
+      body.style.paddingRight = scrollbarWidth > 0 ? `${scrollbarWidth}px` : previousBodyPaddingRight;
+      documentElement.style.setProperty("--scroll-lock-offset", `${scrollbarWidth}px`);
       body.style.overflow = "hidden";
       documentElement.style.overflow = "hidden";
     } else {
       body.style.overflow = previousBodyOverflow;
       documentElement.style.overflow = previousHtmlOverflow;
+      body.style.paddingRight = previousBodyPaddingRight;
+      if (previousScrollLockOffset) {
+        documentElement.style.setProperty("--scroll-lock-offset", previousScrollLockOffset);
+      } else {
+        documentElement.style.removeProperty("--scroll-lock-offset");
+      }
     }
 
     return () => {
       body.style.overflow = previousBodyOverflow;
       documentElement.style.overflow = previousHtmlOverflow;
+      body.style.paddingRight = previousBodyPaddingRight;
+      if (previousScrollLockOffset) {
+        documentElement.style.setProperty("--scroll-lock-offset", previousScrollLockOffset);
+      } else {
+        documentElement.style.removeProperty("--scroll-lock-offset");
+      }
     };
   }, [hasOpenModal]);
 
@@ -361,7 +378,7 @@ function App() {
   }, [selectedVideo, closeModal, actionModal, processesModalOpen]);
 
   return (
-    <div className="app">
+    <div className={`app${hasOpenModal ? " modal-open" : ""}`}>
       <nav className="nav">
         <div className="container nav-content">
           <a className="nav-logo" href="/cf">
@@ -369,7 +386,7 @@ function App() {
           </a>
 
           <div className="nav-search-wrapper">
-            <Search size={18} className={`nav-search-icon${isSearchPending ? " searching" : ""}`} />
+            <IconSearch size={18} className={`nav-search-icon${isSearchPending ? " searching" : ""}`} />
             <input
               type="text"
               className="nav-search"
@@ -420,13 +437,13 @@ function App() {
             </div>
           ) : hasActiveSearch && videos.length === 0 ? (
             <div className="empty">
-              <SearchX className="empty-icon" aria-hidden="true" />
+              <IconSearchOff className="empty-icon" aria-hidden="true" />
               <h2>No results</h2>
               <p>No videos match your search</p>
             </div>
           ) : videos.length === 0 ? (
             <div className="empty">
-              <FolderOpen className="empty-icon" aria-hidden="true" />
+              <IconFolderOpen className="empty-icon" aria-hidden="true" />
               <h2>No videos yet</h2>
               <p>Upload or download videos to get started</p>
             </div>

@@ -1,26 +1,45 @@
 # Assets and Images
 
-## `images/` Folder Purpose
-- Serves static placeholder images via backend route `/api/placeholder-images`.
-- Stores curated/renamed image assets and analysis markdown used by UI thumbnail picker.
+## Purpose of `images/`
 
-## Current Curated Set
-- `images/01_teal_eye_extreme_closeup.jpeg`
-- `images/02_white_hair_center_portrait.jpeg`
-- `images/03_violet_tone_soft_portrait.jpeg`
-- `images/04_blue_eyes_black_hair_portrait.jpeg`
-- `images/05_red_hair_freckled_closeup.jpeg`
-- `images/ANALYSIS.md`
+- Primary source for backend-served placeholder images.
+- Files are exposed at `/api/placeholder-images/<filename>`.
+- Includes `ANALYSIS.md` notes and artwork used by runtime redirect UI.
 
-## Additional Placeholder Images
-- Existing image files in `images/` are auto-discovered by extension:
-  - `.jpg`, `.jpeg`, `.png`, `.webp`, `.gif`
-- Frontend receives deterministic placeholder assignment using a hash of video ID.
+## Discovery Rules
 
-## Public Frontend Assets
-- `client/public/placeholder-1.jpeg`
-- `client/public/placeholder-2.jpeg`
-- `client/public/placeholder-3.jpeg`
-- `client/public/favicon.svg`
+Backend auto-discovers placeholder files from `PLACEHOLDERS_DIR` using extensions:
 
-These public assets are bundled by Vite and are separate from backend-served `/api/placeholder-images` files.
+- `.jpg`
+- `.jpeg`
+- `.png`
+- `.webp`
+- `.gif`
+
+List endpoint: `GET /api/placeholder-images`.
+
+## Thumbnail Assignment Model
+
+- For videos without explicit override, backend assigns deterministic placeholder by hashing video ID.
+- Auto-assigned placeholders are persisted in `thumbnail-map.json`.
+- User changes via UI override this value and are also stored in `thumbnail-map.json`.
+
+## Current Repository Image Set
+
+Tracked `images/` files include:
+
+- anime portrait/close-up variants (for example: `anime-eye-teal-extreme-closeup.jpeg`, `anime-girl-violet-tone-soft-closeup.jpeg`, `anime-girl-red-hair-freckled-closeup.jpeg`)
+- landscape/background variants (for example: `misty-harbor-castle-landscape.jpeg`, `snowfield-lone-figure-landscape.jpeg`)
+- redirect background: `redirect-background-art.jpg`
+- analysis notes: `ANALYSIS.md`
+
+Use `git ls-files images` to view the exact current set.
+
+## Frontend Public Assets
+
+`client/public/` includes static Vite assets separate from backend placeholder discovery:
+
+- `favicon.svg`
+- `placeholder-1.jpeg`
+- `placeholder-2.jpeg`
+- `placeholder-3.jpeg`

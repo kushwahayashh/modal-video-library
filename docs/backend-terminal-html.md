@@ -1,34 +1,39 @@
 # Backend Standalone Terminal HTML
 
 ## Purpose
-The backend includes a standalone HTML page under `server/src/`:
-- `terminal.html`: live terminal client used by route `/terminal`.
 
-The primary app UI is React-based. This page is a utility UI.
+`server/src/terminal.html` is a standalone utility terminal page served by `GET /terminal`.
 
-## `terminal.html`
+This is separate from the React SPA but linked from the app navbar.
 
-### Dependencies
-- xterm.js from CDN.
-- xterm addons: fit, web-links, webgl, canvas.
+## UI + Libraries
 
-### UI Features
-- Header with connection status.
-- Clear button.
-- Reconnect button that appears when disconnected.
+- Uses `xterm.js` from CDN plus addons:
+  - fit
+  - web-links
+  - webgl
+  - canvas
+- Header controls:
+  - Clear button
+  - Reconnect button (shown when disconnected)
+  - Connection status badge
+- Fonts: Space Grotesk (UI) and Space Mono (terminal)
 
-### Runtime Behavior
-- Connects to `/ws/terminal` using `ws://` or `wss://` based on page protocol.
-- Sends periodic ping every 25 seconds.
-- Supports resize sync with debounced fitting.
-- Keeps terminal rendered via heartbeat when visible.
-- Auto-reconnect with capped exponential backoff.
-- Supports optional renderer selection via query param `?renderer=webgl`.
+## Connection Behavior
 
-### Client Message Handling
-- Writes raw output from server `output` events.
-- Prints system lines for exit and connection loss.
-- Sends keystrokes to server on every terminal input event.
+- Connects to `/ws/terminal` with `ws://` or `wss://` based on page protocol.
+- Sends keepalive `ping` every 25s.
+- Syncs terminal dimensions using fit addon with debounced resize.
+- Auto-reconnects with capped backoff.
+- Handles server `output`, `pong`, `exit`, and `error` message types.
 
-## Notes for Refactor
-- `terminal.html` is actively linked by React app (`/terminal`).
+## Rendering Notes
+
+- Applies theme from local CSS variables.
+- Supports query-param renderer preference (for example `?renderer=webgl`).
+- Keeps a fallback renderer path if WebGL is unavailable.
+
+## Why it matters
+
+- Provides direct operational shell access when frontend app is running.
+- Serves as a lightweight debug surface independent of SPA build state.

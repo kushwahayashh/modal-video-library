@@ -1,105 +1,223 @@
 # Backend API Reference
 
-## Base URL
-- Local: `http://localhost:3000`
-- Dev frontend proxy: Vite forwards `/api/*` to backend.
+Base URL (local): `http://localhost:3000`
 
-## Health and Cloudflare
+In Vite dev, frontend requests to `/api/*` are proxied to backend.
+
+## Health, Runtime, and Tunnel
 
 ### `GET /api/health`
-- Response: `{ status, timestamp, cloudflareUrl }`
+
+Returns:
+
+```json
+{ "status": "ok", "timestamp": "...", "cloudflareUrl": null }
+```
+
+### `GET /api/runtime/status`
+
+Returns activity info used by Modal idle watchdog:
+
+```json
+{
+  "lastActivityAt": 1739999999999,
+  "terminalConnectionCount": 0,
+  "activeSpriteJobs": 0
+}
+```
 
 ### `POST /api/cf-url`
-- Body: `{ url }`
-- Validation: URL must contain `trycloudflare.com`.
-- Response: `{ success, url }`
+
+Body:
+
+```json
+{ "url": "https://xxxx.trycloudflare.com" }
+```
+
+- Validates that URL contains `trycloudflare.com`.
+- Response: `{ success: true, url }`.
 
 ### `GET /api/cf-url`
-- Query: `redirect=true` optionally redirects to URL.
-- Response: `{ url }` or 404 if unset.
+
+- If unset: `404 { error: "Cloudflare URL not set" }`
+- If set: `{ url }`
+- Query `?redirect=true` returns HTTP redirect.
 
 ### `GET /cf`
-- Redirect helper to configured Cloudflare URL.
+
+Redirects to currently registered Cloudflare URL (or 404 if unset).
 
 ## Placeholder and Thumbnail Map
 
 ### `GET /api/placeholder-images`
-- Returns `images` array of URL paths under `/api/placeholder-images/<filename>`.
+
+Returns discovered placeholder image URLs:
+
+```json
+{ "images": ["/api/placeholder-images/file.jpg"] }
+```
 
 ### `GET /api/thumbnail-map`
-- Returns JSON map: `{ [videoId]: imageUrl }`.
+
+Returns persisted thumbnail override map:
+
+```json
+{ "<videoId>": "/api/placeholder-images/file.jpg" }
+```
 
 ### `POST /api/thumbnail-map`
-- Body: `{ videoId, imageUrl }`
-- Upserts thumbnail map entry.
-- Validation:
-  - Returns `400` when `videoId` or `imageUrl` is missing/blank/non-string.
+
+Body:
+
+```json
+{ "videoId": "...", "imageUrl": "/api/placeholder-images/file.jpg" }
+```
+
+- 400 on missing/blank/non-string values.
+- Success response: `{ "success": true }`.
 
 ## Video Library
 
 ### `GET /api/videos`
-- Returns `{ videos, total }`.
-- Recursively scans `/data/videos` including subfolders.
-- Each video item includes:
-  - `id`, `title`, `filename`
-  - `size`, `sizeBytes`, `createdAt`
-  - `thumbnail` (currently always null from backend)
-  - `duration`
-  - `hasSprites`
+
+Query parameters:
+
+- `q`: optional case-insensitive search against `title` and `filename`
+- `limit`: optional positive integer (pagination mode, max `200`)
+- `offset`: optional integer >= 0 (used only when `limit` is valid)
+
+Without valid `limit`, returns full filtered list:
+
+```json
+{ "videos": [...], "total": 42 }
+```
+
+With pagination:
+
+```json
+{
+  "videos": [...],
+  "total": 42,
+  "offset": 0,
+  "limit": 60,
+  "hasMore": true,
+  "nextOffset": 60
+}
+```
+
+Each video item includes:
+
+- `id`, `title`, `filename`
+- `size`, `sizeBytes`
+- `createdAt`, `addedAt`
+- `thumbnail` (override or stable placeholder)
+- `duration`
+- `hasSprites`
 
 ### `GET /api/videos/:id`
-- Returns enriched metadata:
-  - basic video fields
-  - `modifiedAt`
-  - video stream fields: `resolution`, `videoCodec`, `videoBitrate`, `framerate`, `pixelFormat`
-  - audio stream fields: `audioCodec`, `audioBitrate`, `audioChannels`, `sampleRate`
-  - format fields: `container`, `totalBitrate`
+
+Returns detailed metadata for one video:
+
+- base fields (`id`, `title`, `filename`, `size`, `createdAt`, `modifiedAt`, `duration`)
+- video stream fields (`resolution`, `videoCodec`, `videoBitrate`, `framerate`, `pixelFormat`)
+- audio stream fields (`audioCodec`, `audioBitrate`, `audioChannels`, `sampleRate`)
+- container fields (`container`, `totalBitrate`)
+
+404 when video does not exist.
 
 ### `POST /api/videos/:id/rename`
-- Body: `{ newName }`.
-- Preserves original extension and parent subfolder.
+
+Body:
+
+```json
+{ "newName": "new title without extension" }
+```
+
+Behavior:
+
+- Keeps original extension and parent directory.
 - Sanitizes invalid filename characters.
-- Renames sprite folder from old ID to new ID and rewrites VTT sprite URL references.
-- Moves thumbnail override mapping from old ID to new ID when present.
+- Moves sprite directory and rewrites VTT sprite URL references.
+- Migrates thumbnail and `addedAt` map keys to new video ID.
+
+Responses:
+
+- 200 `{ success: true, id, filename }`
+- 400 invalid name/body
+- 404 video missing
+- 409 target filename exists
 
 ### `DELETE /api/videos/:id`
-- Deletes video file.
-- Also deletes sprite directory and thumbnail override entry for the same video ID.
+
+Deletes video and related metadata.
+
+Response: `{ success: true }`.
 
 ## Sprite Endpoints
 
 ### `POST /api/videos/:id/sprites`
-- Starts async sprite generation.
-- Returns immediately.
+
+Starts asynchronous sprite generation.
+
+- 404 when video missing.
+- 409 when a sprite job for that video is already running.
+
+Success response:
+
+```json
+{ "success": true, "message": "Sprite generation started" }
+```
 
 ### `GET /api/sprites/progress`
-- Returns `{ jobs: [...] }` with current extraction/tiling status.
+
+Returns current in-memory jobs:
+
+```json
+{ "jobs": [{ "videoId": "...", "title": "...", "status": "extracting|tiling|done|error", "current": 12, "total": 40, "error": null }] }
+```
 
 ### `GET /api/sprites/:id/image`
-- Returns generated sprite sheet as `image/jpeg`.
+
+Returns sprite sheet (`image/jpeg`) or 404.
 
 ### `GET /api/sprites/:id/vtt`
-- Returns WebVTT metadata for sprite previews.
+
+Returns WebVTT (`text/vtt`) or 404.
 
 ### `GET /api/sprites/:id/status`
-- Returns `{ exists: boolean }`.
+
+Returns:
+
+```json
+{ "exists": true }
+```
 
 ## Streaming
 
 ### `GET /api/stream/:id`
-- Query: `download=1` enables attachment download.
-- Supports `Range` requests for progressive playback.
-- MIME inferred from file extension.
 
-## WebSocket Terminal
+- Streams media with content type inferred from extension.
+- Supports HTTP `Range` requests.
+- `?download=1` forces attachment download.
+- Invalid range returns 416.
 
-### `GET /ws/terminal` (WebSocket upgrade)
-- Client -> server messages:
-  - `{ type: "input", data: string }`
-  - `{ type: "resize", cols, rows }`
-  - `{ type: "ping" }`
-- Server -> client messages:
-  - `{ type: "output", data }`
-  - `{ type: "exit", code }`
-  - `{ type: "error", message }`
-  - `{ type: "pong" }`
+## Terminal WebSocket
+
+### `GET /ws/terminal` (WebSocket)
+
+Client -> server messages:
+
+```json
+{ "type": "input", "data": "ls\n" }
+{ "type": "resize", "cols": 120, "rows": 40 }
+{ "type": "ping" }
+```
+
+Server -> client messages:
+
+```json
+{ "type": "output", "data": "..." }
+{ "type": "pong" }
+{ "type": "exit", "code": 0 }
+{ "type": "error", "message": "..." }
+```

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { Play, Download, Trash2, Edit3, Copy, Info, LayoutGrid, Image } from "lucide-react";
+import { IconPlayerPlayFilled, IconDownload, IconTrash, IconEdit, IconCopy, IconInfoCircle, IconLayoutGrid, IconPhoto } from "@tabler/icons-react";
 import type { Video } from "../../types";
 import type { ContextMenuState } from "./types";
 
@@ -12,13 +12,14 @@ interface ContextMenuProps {
 interface MenuItem {
   id: string;
   label: string;
-  icon: typeof Play;
+  icon: typeof IconPlayerPlayFilled;
   danger?: boolean;
   dividerBefore?: boolean;
 }
 
 const VIEWPORT_MARGIN = 8;
 const CLOSE_ANIMATION_MS = 140;
+const MENU_ICON_SIZE = 18;
 
 function clamp(value: number, min: number, max: number) {
   if (max < min) return min;
@@ -48,18 +49,18 @@ export default function ContextMenu({ state, onClose, onAction }: ContextMenuPro
   const menuItems = useMemo<MenuItem[]>(() => {
     if (!activeVideo) return [];
     return [
-      { id: "play", label: "Play", icon: Play },
-      { id: "download", label: "Download", icon: Download },
-      { id: "copy-link", label: "Copy Link", icon: Copy },
-      { id: "rename", label: "Rename", icon: Edit3, dividerBefore: true },
-      { id: "info", label: "Properties", icon: Info },
+      { id: "play", label: "Play", icon: IconPlayerPlayFilled },
+      { id: "download", label: "Download", icon: IconDownload },
+      { id: "copy-link", label: "Copy Link", icon: IconCopy },
+      { id: "rename", label: "Rename", icon: IconEdit, dividerBefore: true },
+      { id: "info", label: "Properties", icon: IconInfoCircle },
       {
         id: "sprites",
         label: activeVideo.hasSprites ? "Regenerate Sprites" : "Generate Sprites",
-        icon: LayoutGrid,
+        icon: IconLayoutGrid,
       },
-      { id: "thumbnail", label: "Change Thumbnail", icon: Image },
-      { id: "delete", label: "Delete", icon: Trash2, danger: true, dividerBefore: true },
+      { id: "thumbnail", label: "Change Thumbnail", icon: IconPhoto },
+      { id: "delete", label: "Delete", icon: IconTrash, danger: true, dividerBefore: true },
     ];
   }, [activeVideo]);
 
@@ -226,7 +227,7 @@ export default function ContextMenu({ state, onClose, onAction }: ContextMenuPro
               onClose();
             }}
           >
-            <item.icon size={16} />
+            <item.icon size={MENU_ICON_SIZE} />
             <span>{item.label}</span>
           </button>
         </div>

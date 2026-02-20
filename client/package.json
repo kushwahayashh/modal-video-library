@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tabler/icons-react": "^3.37.1",
     "lucide-react": "^0.563.0",
     "plyr": "^3.8.4",
     "plyr-react": "^6.0.0",

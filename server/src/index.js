@@ -105,6 +105,15 @@ function pickStablePlaceholder(seed, placeholders) {
   return placeholders[hash % placeholders.length] || null;
 }
 
+function resolveStoredThumbnail(value, placeholderImageSet) {
+  const stored = normalizeNonEmptyString(value);
+  if (!stored) return null;
+  if (stored.startsWith("/api/placeholder-images/")) {
+    return placeholderImageSet.has(stored) ? stored : null;
+  }
+  return stored;
+}
+
 async function listPlaceholderImageUrls() {
   try {
     const entries = await fsp.readdir(PLACEHOLDERS_DIR, { withFileTypes: true });
@@ -251,6 +260,7 @@ app.get("/api/videos", async (request) => {
     const currentAddedMap = await readVideoAddedMap();
     const currentThumbMap = await readThumbMap();
     const placeholderImages = await listPlaceholderImageUrls();
+    const placeholderImageSet = new Set(placeholderImages);
     const autoAssignedThumbMap = {};
     const nextAddedMap = {};
     let addedMapChanged = false;
@@ -268,9 +278,13 @@ app.get("/api/videos", async (request) => {
         const videoId = toBase64Url(normalizedPath);
         const storedAddedAt = normalizeIsoTimestamp(currentAddedMap[videoId]);
         const addedAt = storedAddedAt || fallbackAddedAt(stat);
-        const storedThumbnail = normalizeNonEmptyString(currentThumbMap[videoId]);
+        const storedThumbnailRaw = normalizeNonEmptyString(currentThumbMap[videoId]);
+        const storedThumbnail = resolveStoredThumbnail(
+          storedThumbnailRaw,
+          placeholderImageSet
+        );
         const thumbnail = storedThumbnail || pickStablePlaceholder(videoId, placeholderImages);
-        if (!storedThumbnail && thumbnail) {
+        if (thumbnail && storedThumbnailRaw !== thumbnail) {
           autoAssignedThumbMap[videoId] = thumbnail;
         }
         nextAddedMap[videoId] = addedAt;
@@ -304,7 +318,13 @@ app.get("/api/videos", async (request) => {
       try {
         await updateThumbMap((thumbMap) => {
           for (const [videoId, imageUrl] of Object.entries(autoAssignedThumbMap)) {
-            if (!normalizeNonEmptyString(thumbMap[videoId])) {
+            const existing = normalizeNonEmptyString(thumbMap[videoId]);
+            const existingIsMissingPlaceholder =
+              !!existing &&
+              existing.startsWith("/api/placeholder-images/") &&
+              !placeholderImageSet.has(existing);
+
+            if (!existing || existingIsMissingPlaceholder) {
               thumbMap[videoId] = imageUrl;
             }
           }

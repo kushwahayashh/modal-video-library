@@ -1,36 +1,44 @@
 # Frontend Styling and Design System
 
-## Global Design Tokens (`client/src/index.css`)
-- Core palette and semantics are defined via CSS variables:
-  - Backgrounds: `--bg-primary`, `--bg-secondary`, `--bg-tertiary`, `--bg-card`, `--bg-card-hover`
-  - Text: `--text-primary`, `--text-secondary`, `--text-muted`
-  - Border: `--border`
-  - Accent and semantics: `--accent`, `--danger`, `--success`, `--warning`
-  - Overlay and utility tokens: `--overlay-*`, `--danger-subtle`, `--shimmer-highlight`, `--shadow-*`
-- Font family is Space Grotesk.
-- Global scrollbar and selection styles are centralized here.
+## Global Tokens (`client/src/index.css`)
 
-## Page-Level Style Files
+Core variables live in `:root` and should be reused across UI:
+
+- Backgrounds: `--bg-primary`, `--bg-secondary`, `--bg-tertiary`, `--bg-card`, `--bg-card-hover`
+- Text: `--text-primary`, `--text-secondary`, `--text-muted`
+- Borders/accent: `--border`, `--accent`
+- Semantics: `--danger`, `--danger-hover`, `--success`, `--warning`
+- Overlay/utility: `--overlay-*`, `--danger-subtle`, `--shimmer-highlight`
+
+Global typography uses Space Grotesk.
+
+## Styling File Responsibilities
+
+- `client/src/index.css`
+  - CSS variables and reset/base rules
+  - global font, selection, scrollbar styles
 - `client/src/App.css`
-  - Navigation bar and search.
-  - Video grid cards.
-  - Context menu.
-  - Video playback modal and Plyr thumbnail styles.
-  - Action modals (rename/delete/properties/thumbnail picker).
-  - Sprite progress toast.
-  - Responsive breakpoints.
+  - navigation, cards, context menu, modals, custom player, processes modal, responsive rules
+- `client/src/components/ToastStack.css`
+  - toast container/card enter-exit transitions
 
-## Styling Constraints in Current Codebase
-- Neutral/dark monochrome visual language.
-- Border radii are mostly minimal (4px) with some 8px modal corners.
-- Overlays use translucent dark backgrounds and selective backdrop blur.
-- Video player modal uses CSS transitions for open/close.
-- Action modals use CSS keyframe animations (`actionModalFadeIn`/`actionModalFadeOut`, `slideUp`/`slideDown`) with `onAnimationEnd` for cleanup.
-- Context menu uses `contextMenuFadeIn` animation on mount.
+## Visual Language in Current App
 
-## Note on Consistency
-- `server/src/terminal.html` mirrors main token set closely.
+- Dark neutral palette built from root variables.
+- Flat styling with minimal radius (primarily `4px`).
+- No box-shadow emphasis in main app surfaces (`--shadow-*` set to `none`).
+- Backdrop blur used on nav and modal overlays.
+- Motion is mostly short opacity/transform transitions.
 
-## Toast Notifications
-- Toast styles are in `client/src/components/ToastStack.css`.
-- Supports `error`, `success`, and `status` (with progress bar) variants.
+## Component-Specific Notes
+
+- Custom player (`.vp-*` classes) intentionally uses:
+  - black media stage
+  - gradient controls backdrop
+  - hover/scrub sprite preview states
+- Context menu and action modal rely on lightweight enter/exit animations.
+- Processes and status banners remain neutral (no colored informational accents).
+
+## Terminal UI Parity
+
+`server/src/terminal.html` mirrors the same token naming and typography approach, while remaining standalone.

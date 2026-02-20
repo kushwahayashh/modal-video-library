@@ -1,5 +1,5 @@
 import { useId, useRef } from "react";
-import { Check } from "lucide-react";
+import { IconCheck } from "@tabler/icons-react";
 import type { Video } from "../../types";
 import { useDialogFocusTrap } from "../../hooks/useDialogFocusTrap";
 import CustomVideoPlayer from "./CustomVideoPlayer";
@@ -35,7 +35,7 @@ export default function VideoPlayerModal({
           <span id={titleId}>{selectedVideo.title}</span>
           {selectedVideo.hasSprites && (
             <span className="sprite-badge">
-              <Check size={14} />
+              <IconCheck size={14} />
               Sprite Available
             </span>
           )}

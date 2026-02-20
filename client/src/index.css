@@ -23,6 +23,7 @@
   --shimmer-highlight: rgba(255, 255, 255, 0.03);
   --shadow-strong: none;
   --shadow-medium: none;
+  --scroll-lock-offset: 0px;
 }
 
 * {
