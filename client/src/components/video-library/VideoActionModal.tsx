@@ -34,29 +34,6 @@ interface SummaryItem {
 interface DetailItem {
   label: string;
   value: string;
-  asPill?: boolean;
-}
-
-function DetailSection({ title, items }: { title: string; items: DetailItem[] }) {
-  if (items.length === 0) return null;
-
-  return (
-    <div className="prop-section">
-      <div className="prop-section-title">{title}</div>
-      <div className="prop-kv">
-        {items.map((item) => (
-          <div key={`${title}-${item.label}`} className="prop-kv-row">
-            <span className="prop-kv-label">{item.label}</span>
-            {item.asPill ? (
-              <span className="prop-pill">{item.value}</span>
-            ) : (
-              <span className="prop-kv-value">{item.value}</span>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 
@@ -118,22 +95,37 @@ export default function VideoActionModal({
 
   const videoDetails: DetailItem[] = [
     videoProps?.resolution ? { label: "Resolution", value: videoProps.resolution } : null,
-    videoProps?.videoCodec ? { label: "Codec", value: videoProps.videoCodec.toUpperCase(), asPill: true } : null,
+    videoProps?.videoCodec ? { label: "Codec", value: videoProps.videoCodec.toUpperCase() } : null,
     videoProps?.framerate ? { label: "Framerate", value: videoProps.framerate } : null,
     videoProps?.videoBitrate ? { label: "Video bitrate", value: videoProps.videoBitrate } : null,
     videoProps?.pixelFormat ? { label: "Pixel format", value: videoProps.pixelFormat } : null,
   ].filter(Boolean) as DetailItem[];
 
   const audioDetails: DetailItem[] = [
-    videoProps?.audioCodec ? { label: "Codec", value: videoProps.audioCodec.toUpperCase(), asPill: true } : null,
+    videoProps?.audioCodec ? { label: "Codec", value: videoProps.audioCodec.toUpperCase() } : null,
     videoProps?.audioChannels ? { label: "Channels", value: videoProps.audioChannels } : null,
     videoProps?.sampleRate ? { label: "Sample rate", value: videoProps.sampleRate } : null,
     videoProps?.audioBitrate ? { label: "Audio bitrate", value: videoProps.audioBitrate } : null,
   ].filter(Boolean) as DetailItem[];
+  const hasStreamDetails = hasVideoDetails || hasAudioDetails;
 
   const modalClassName = `action-modal ${
-    actionModal === "thumbnail" ? "thumbnail-modal" : actionModal === "properties" ? "properties-modal" : ""
+    actionModal === "rename"
+      ? "rename-modal"
+      : actionModal === "thumbnail"
+        ? "thumbnail-modal"
+        : actionModal === "properties"
+          ? "properties-modal"
+          : ""
   }`;
+  const normalizedTitle = actionVideo.title.trim().toLowerCase();
+  const normalizedFilename = actionVideo.filename.trim().toLowerCase();
+  const filenameWithoutExtension = normalizedFilename.replace(/\.[^/.]+$/, "");
+  const shouldShowFilename = Boolean(
+    actionVideo.filename &&
+    normalizedFilename !== normalizedTitle &&
+    filenameWithoutExtension !== normalizedTitle
+  );
 
   return (
     <div
@@ -197,55 +189,67 @@ export default function VideoActionModal({
             <div className="prop-header">
               <div id={titleId} className="prop-label">{dialogTitle}</div>
               <div className="prop-title">{actionVideo.title}</div>
-              <div className="prop-filename">{actionVideo.filename}</div>
+              {shouldShowFilename && (
+                <div className="prop-filename">{actionVideo.filename}</div>
+              )}
             </div>
             <div className="prop-body">
               {!videoProps ? (
-                <div className="prop-skeleton">
-                  <div className="prop-summary-skel">
-                    <div className="prop-skel-block" />
-                    <div className="prop-skel-block" />
-                    <div className="prop-skel-block" />
-                    <div className="prop-skel-block" />
-                  </div>
-                  <div className="prop-section-skel-grid">
-                    <div className="prop-section-skel" />
-                    <div className="prop-section-skel" />
-                  </div>
-                  <div className="prop-meta-skel" />
-                </div>
+                <div className="prop-loading">Loading properties...</div>
               ) : (
                 <div className="prop-content">
-                  <div className="prop-summary">
+                  <section className="prop-section">
+                    <div className="prop-section-title">Overview</div>
                     {summaryItems.map((item) => (
-                      <div key={item.label} className="prop-summary-item">
-                        <span className="prop-summary-label">{item.label}</span>
-                        <span className="prop-summary-value">{item.value}</span>
+                      <div key={item.label} className="prop-row">
+                        <span className="prop-row-label">{item.label}</span>
+                        <span className="prop-row-value">{item.value}</span>
                       </div>
                     ))}
-                  </div>
+                  </section>
 
-                  {(hasVideoDetails || hasAudioDetails) ? (
-                    <div className="prop-sections">
-                      <DetailSection title="Video" items={videoDetails} />
-                      <DetailSection title="Audio" items={audioDetails} />
+                  {hasStreamDetails ? (
+                    <div className="prop-columns">
+                      {videoDetails.length > 0 && (
+                        <section className="prop-section">
+                          <div className="prop-section-title">Video</div>
+                          {videoDetails.map((item) => (
+                            <div key={`video-${item.label}`} className="prop-row">
+                              <span className="prop-row-label">{item.label}</span>
+                              <span className="prop-row-value">{item.value}</span>
+                            </div>
+                          ))}
+                        </section>
+                      )}
+                      {audioDetails.length > 0 && (
+                        <section className="prop-section">
+                          <div className="prop-section-title">Audio</div>
+                          {audioDetails.map((item) => (
+                            <div key={`audio-${item.label}`} className="prop-row">
+                              <span className="prop-row-label">{item.label}</span>
+                              <span className="prop-row-value">{item.value}</span>
+                            </div>
+                          ))}
+                        </section>
+                      )}
                     </div>
                   ) : (
                     <div className="prop-empty">No stream details available.</div>
                   )}
 
-                  <div className="prop-meta">
+                  <section className="prop-section">
+                    <div className="prop-section-title">Timeline</div>
                     <div className="prop-meta-row">
-                      <span className="prop-meta-label">Created</span>
-                      <span className="prop-meta-value">{formatDate(videoProps.createdAt || actionVideo.createdAt)}</span>
+                      <span className="prop-row-label">Created</span>
+                      <span className="prop-row-value">{formatDate(videoProps.createdAt || actionVideo.createdAt)}</span>
                     </div>
                     {videoProps.modifiedAt && (
                       <div className="prop-meta-row">
-                        <span className="prop-meta-label">Modified</span>
-                        <span className="prop-meta-value">{formatDate(videoProps.modifiedAt)}</span>
+                        <span className="prop-row-label">Modified</span>
+                        <span className="prop-row-value">{formatDate(videoProps.modifiedAt)}</span>
                       </div>
                     )}
-                  </div>
+                  </section>
                 </div>
               )}
             </div>

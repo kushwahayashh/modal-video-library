@@ -1,19 +1,18 @@
-import { useId, useRef, type RefObject } from "react";
+import { useId, useRef } from "react";
 import { Check } from "lucide-react";
 import type { Video } from "../../types";
 import { useDialogFocusTrap } from "../../hooks/useDialogFocusTrap";
+import CustomVideoPlayer from "./CustomVideoPlayer";
 
 interface VideoPlayerModalProps {
   selectedVideo: Video | null;
   modalVisible: boolean;
-  videoRef: RefObject<HTMLVideoElement | null>;
   onClose: () => void;
 }
 
 export default function VideoPlayerModal({
   selectedVideo,
   modalVisible,
-  videoRef,
   onClose,
 }: VideoPlayerModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -42,9 +41,7 @@ export default function VideoPlayerModal({
           )}
         </div>
         <div className="modal-player">
-          <video ref={videoRef} playsInline>
-            <source src={`/api/stream/${selectedVideo.id}`} type="video/mp4" />
-          </video>
+          <CustomVideoPlayer videoId={selectedVideo.id} hasSprites={selectedVideo.hasSprites} />
         </div>
       </div>
     </div>

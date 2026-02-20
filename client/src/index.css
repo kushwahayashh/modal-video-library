@@ -1,28 +1,28 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --bg-primary: #121212;
-  --bg-secondary: #171717;
-  --bg-tertiary: #1f1f1f;
-  --bg-card: #1a1a1a;
-  --bg-card-hover: #222222;
-  --text-primary: #ffffff;
-  --text-secondary: #a8a8a8;
-  --text-muted: #707070;
-  --border: #2a2a2a;
-  --accent: #ffffff;
+  --bg-primary: #131313;
+  --bg-secondary: #1c1c1c;
+  --bg-tertiary: #252525;
+  --bg-card: #202020;
+  --bg-card-hover: #2c2c2c;
+  --text-primary: #fff;
+  --text-secondary: #b3b3b3;
+  --text-muted: #7a7a7a;
+  --border: #303030;
+  --accent: #fff;
   --danger: #dc2626;
   --danger-hover: #b91c1c;
   --success: #4ade80;
   --warning: #fbbf24;
-  --overlay-nav: rgba(18, 18, 18, 0.92);
-  --overlay-strong: rgba(16, 16, 16, 0.9);
-  --overlay-medium: rgba(16, 16, 16, 0.82);
-  --overlay-light: rgba(16, 16, 16, 0.72);
-  --danger-subtle: rgba(220, 38, 38, 0.12);
-  --shimmer-highlight: rgba(255, 255, 255, 0.04);
-  --shadow-strong: 0 8px 24px rgba(0, 0, 0, 0.4);
-  --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --overlay-nav: rgba(19, 19, 19, 0.88);
+  --overlay-strong: rgba(19, 19, 19, 0.9);
+  --overlay-medium: rgba(19, 19, 19, 0.82);
+  --overlay-light: rgba(19, 19, 19, 0.72);
+  --danger-subtle: rgba(220, 38, 38, 0.14);
+  --shimmer-highlight: rgba(255, 255, 255, 0.03);
+  --shadow-strong: none;
+  --shadow-medium: none;
 }
 
 * {

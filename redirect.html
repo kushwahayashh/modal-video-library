@@ -107,7 +107,7 @@
     font-size: 15px;
     font-weight: 600;
     border: none;
-    border-radius: 6px;
+    border-radius: 0;
     text-decoration: none;
     cursor: pointer;
     transition: opacity 0.2s;
@@ -150,9 +150,10 @@
   function showReady(url) {
     if (ready) return;
     ready = true;
-    titleEl.textContent = "Ready";
+    titleEl.style.display = "none";
     subtitleEl.style.display = "none";
     barEl.style.display = "none";
+    openBtn.textContent = "Your Tunnel is ready";
     openBtn.href = url;
     openBtn.classList.add("visible");
   }

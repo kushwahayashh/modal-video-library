@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, useCallback, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { FolderOpen, Search, SearchX } from "lucide-react";
-import Plyr from "plyr";
-import "plyr/dist/plyr.css";
 import "./App.css";
 import type { Video } from "./types";
 import { useSpriteProgress, type SpriteProgressJob } from "./hooks/useSpriteProgress";
@@ -31,9 +29,6 @@ function App() {
   const pushToast = useCallback((message: string, variant: "error" | "success" = "error") => {
     pushToastRaw({ variant, message });
   }, [pushToastRaw]);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const playerRef = useRef<Plyr | null>(null);
-  const playerVideoIdRef = useRef<string | null>(null);
   const closeTimerRef = useRef<number | null>(null);
   const { contextMenu, openContextMenu, closeContextMenu } = useContextMenuState();
   const {
@@ -272,17 +267,24 @@ function App() {
     });
   };
 
+  useEffect(() => {
+    if (!selectedVideo?.hasSprites) return;
+
+    fetch(`/api/sprites/${selectedVideo.id}/vtt`, { cache: "force-cache" }).catch(() => {});
+    const preloader = new Image();
+    preloader.src = `/api/sprites/${selectedVideo.id}/image`;
+
+    return () => {
+      preloader.src = "";
+    };
+  }, [selectedVideo]);
+
   const closeModal = useCallback(() => {
     setModalVisible(false);
     if (closeTimerRef.current !== null) {
       window.clearTimeout(closeTimerRef.current);
     }
     closeTimerRef.current = window.setTimeout(() => {
-      if (playerRef.current) {
-        playerRef.current.destroy();
-        playerRef.current = null;
-      }
-      playerVideoIdRef.current = null;
       setSelectedVideo(null);
       closeTimerRef.current = null;
     }, 300);
@@ -321,6 +323,26 @@ function App() {
 
   const hasActiveSearch = debouncedSearch.length > 0;
   const isSearchPending = search.trim() !== debouncedSearch;
+  const hasOpenModal = (modalVisible && !!selectedVideo) || !!actionModal || processesModalOpen;
+
+  useEffect(() => {
+    const { body, documentElement } = document;
+    const previousBodyOverflow = body.style.overflow;
+    const previousHtmlOverflow = documentElement.style.overflow;
+
+    if (hasOpenModal) {
+      body.style.overflow = "hidden";
+      documentElement.style.overflow = "hidden";
+    } else {
+      body.style.overflow = previousBodyOverflow;
+      documentElement.style.overflow = previousHtmlOverflow;
+    }
+
+    return () => {
+      body.style.overflow = previousBodyOverflow;
+      documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [hasOpenModal]);
 
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
@@ -337,55 +359,6 @@ function App() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedVideo, closeModal, actionModal, processesModalOpen]);
-
-  useEffect(() => {
-    if (!selectedVideo || !videoRef.current) return;
-
-    const videoEl = videoRef.current;
-    const switchingVideo = playerVideoIdRef.current !== selectedVideo.id;
-
-    if (playerRef.current && switchingVideo) {
-      playerRef.current.destroy();
-      playerRef.current = null;
-    }
-
-    Array.from(videoEl.querySelectorAll('track[kind="metadata"]')).forEach((track) => track.remove());
-
-    if (selectedVideo.hasSprites) {
-      const track = document.createElement("track");
-      track.kind = "metadata";
-      track.label = "thumbnails";
-      track.src = `/api/sprites/${selectedVideo.id}/vtt`;
-      track.default = true;
-      videoEl.appendChild(track);
-    }
-
-    if (!playerRef.current) {
-      playerRef.current = new Plyr(videoEl, {
-        controls: ["play-large", "play", "progress", "current-time", "mute", "volume", "fullscreen"],
-        keyboard: { focused: true, global: true },
-        previewThumbnails: selectedVideo.hasSprites ? {
-          enabled: true,
-          src: `/api/sprites/${selectedVideo.id}/vtt`,
-        } : { enabled: false },
-      });
-    }
-
-    playerVideoIdRef.current = selectedVideo.id;
-  }, [selectedVideo]);
-
-  useEffect(() => {
-    if (!selectedVideo?.hasSprites) return;
-
-    // Warm both VTT metadata and sprite image as soon as modal opens.
-    fetch(`/api/sprites/${selectedVideo.id}/vtt`).catch(() => {});
-    const preloader = new Image();
-    preloader.src = `/api/sprites/${selectedVideo.id}/image`;
-
-    return () => {
-      preloader.src = "";
-    };
-  }, [selectedVideo]);
 
   return (
     <div className="app">
@@ -413,7 +386,7 @@ function App() {
                 <span className="nav-process-count">{activeSpriteJobs.length}</span>
               </button>
             )}
-            <a href="/terminal" target="_blank" rel="noopener noreferrer" className="nav-btn">Terminal</a>
+            <a href="/terminal" target="_blank" rel="noopener noreferrer" className="nav-btn nav-btn-terminal">Terminal</a>
           </div>
         </div>
       </nav>
@@ -484,7 +457,6 @@ function App() {
       <VideoPlayerModal
         selectedVideo={selectedVideo}
         modalVisible={modalVisible}
-        videoRef={videoRef}
         onClose={closeModal}
       />
 

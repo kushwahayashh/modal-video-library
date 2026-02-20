@@ -9,9 +9,9 @@
 
 .toast-card {
   padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-secondary);
+  border: none;
+  border-radius: 4px;
+  background: var(--bg-card);
   color: var(--text-primary);
   font-size: 0.8125rem;
   line-height: 1.35;
@@ -33,14 +33,6 @@
 .toast-card[data-phase="exit"] {
   opacity: 0;
   transform: translateY(6px);
-}
-
-.toast-card.error {
-  border-color: var(--danger);
-}
-
-.toast-card.success {
-  border-color: var(--text-muted);
 }
 
 .toast-msg {
