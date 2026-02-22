@@ -7,11 +7,15 @@ interface ThumbnailPickerProps {
   onSelect: (imageUrl: string) => void;
 }
 
+type ThumbnailStatus = "loaded" | "error";
+
 function ThumbnailPicker({ images, loading, selectedImage, onSelect }: ThumbnailPickerProps) {
-  const [thumbnailLoadState, setThumbnailLoadState] = useState<Record<string, boolean>>({});
+  const [thumbnailStatusByImage, setThumbnailStatusByImage] = useState<
+    Record<string, ThumbnailStatus>
+  >({});
 
   useEffect(() => {
-    setThumbnailLoadState({});
+    setThumbnailStatusByImage({});
   }, [images]);
 
   return (
@@ -24,32 +28,44 @@ function ThumbnailPicker({ images, loading, selectedImage, onSelect }: Thumbnail
         <div className="thumbnail-picker-empty">No thumbnail images available.</div>
       )}
 
-      {!loading && images.map((img) => (
-        <button
-          key={img}
-          className={`thumbnail-picker-item ${selectedImage === img ? "active" : ""} ${thumbnailLoadState[img] ? "loaded" : ""}`}
-          onClick={() => onSelect(img)}
-        >
-          {!thumbnailLoadState[img] && <div className="thumbnail-picker-skeleton" />}
-          <img
-            src={img}
-            alt=""
-            loading="lazy"
-            onLoad={() => {
-              setThumbnailLoadState((prev) => {
-                if (prev[img]) return prev;
-                return { ...prev, [img]: true };
-              });
-            }}
-            onError={() => {
-              setThumbnailLoadState((prev) => {
-                if (prev[img]) return prev;
-                return { ...prev, [img]: true };
-              });
-            }}
-          />
-        </button>
-      ))}
+      {!loading && images.map((img) => {
+        const status = thumbnailStatusByImage[img];
+        const loaded = status === "loaded";
+        const failed = status === "error";
+
+        return (
+          <button
+            key={img}
+            className={`thumbnail-picker-item ${selectedImage === img ? "active" : ""} ${loaded ? "loaded" : ""} ${failed ? "error" : ""}`}
+            disabled={failed}
+            onClick={() => onSelect(img)}
+          >
+            {!loaded && !failed && <div className="thumbnail-picker-skeleton" />}
+            {!failed && (
+              <img
+                src={img}
+                alt=""
+                loading="lazy"
+                onLoad={() => {
+                  setThumbnailStatusByImage((prev) => {
+                    if (prev[img] === "loaded") return prev;
+                    return { ...prev, [img]: "loaded" };
+                  });
+                }}
+                onError={() => {
+                  setThumbnailStatusByImage((prev) => {
+                    if (prev[img] === "error") return prev;
+                    return { ...prev, [img]: "error" };
+                  });
+                }}
+              />
+            )}
+            {failed && (
+              <span className="thumbnail-picker-fallback">Unavailable</span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }

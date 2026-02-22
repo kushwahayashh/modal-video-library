@@ -146,7 +146,7 @@
     #terminal {
       width: 100%;
       height: 100%;
-      font-family: "Space Mono", ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-family: "Space Mono", monospace;
     }
 
     .xterm {
@@ -198,7 +198,6 @@
       pingTimer: null,
       resizeTimer: null,
       reconnectTimer: null,
-      renderTimer: null,
       reconnectAttempts: 0,
       isConnected: false,
       isConnecting: false,
@@ -207,8 +206,9 @@
       lastCols: 0,
       lastRows: 0,
     };
-    const TERMINAL_FONT_FAMILY =
-      '"Space Mono", ui-monospace, SFMono-Regular, SF Mono, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+    const TERMINAL_FONT_FAMILY = '"Space Mono", "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace';
+    const TERMINAL_FONT_SIZE = 15;
+    const TERMINAL_LINE_HEIGHT = 1.2;
 
     function cssVar(name) {
       return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -246,18 +246,32 @@
     }
 
     function buildTheme() {
-      const bg = cssVar('--bg-primary');
-      const foreground = cssVar('--text-primary');
-      const fgColor = parseColor(foreground);
-      const selectionBg = withAlpha(fgColor, 0.18) || cssVar('--text-secondary');
+      const bg = '#1F1F1F';
+      const foreground = '#CCCCCC';
 
       return {
         background: bg,
         foreground: foreground,
         cursor: foreground,
         cursorAccent: bg,
-        selectionBackground: selectionBg,
+        selectionBackground: 'rgba(255, 255, 255, 0.18)',
         selectionForeground: foreground,
+        black: '#000000',
+        red: '#cd3131',
+        green: '#0DBC79',
+        yellow: '#e5e510',
+        blue: '#2472c8',
+        magenta: '#bc3fbc',
+        cyan: '#11a8cd',
+        white: '#e5e5e5',
+        brightBlack: '#666666',
+        brightRed: '#f14c4c',
+        brightGreen: '#23d18b',
+        brightYellow: '#f5f543',
+        brightBlue: '#3b8eea',
+        brightMagenta: '#d670d6',
+        brightCyan: '#29b8db',
+        brightWhite: '#e5e5e5',
       };
     }
 
@@ -299,7 +313,6 @@
 
       try {
         state.fitAddon.fit();
-        forceRender();
       } catch (e) {
         console.warn('Fit error:', e);
       }
@@ -317,52 +330,18 @@
       state.term.writeln(`\r\n\x1b[2m${message}\x1b[0m`);
     }
 
-    function forceRender() {
-      if (!state.term) return;
-      if (typeof state.term.refresh === 'function') {
-        try {
-          const end = Math.max(0, state.term.rows - 1);
-          state.term.refresh(0, end);
-        } catch (e) {
-          // Ignore refresh errors
-        }
-        return;
-      }
-      try {
-        state.term.write('');
-      } catch (e) {
-        // Ignore write errors
-      }
-    }
-
     function refocusTerminal() {
       if (!state.term) return;
       state.term.focus();
-      forceRender();
     }
 
     function clearTimers() {
       clearInterval(state.pingTimer);
       clearTimeout(state.reconnectTimer);
       clearTimeout(state.resizeTimer);
-      clearInterval(state.renderTimer);
       state.pingTimer = null;
       state.reconnectTimer = null;
       state.resizeTimer = null;
-      state.renderTimer = null;
-    }
-
-    function startRenderHeartbeat() {
-      if (state.renderTimer || !state.term) return;
-      state.renderTimer = setInterval(() => {
-        if (document.hidden) return;
-        forceRender();
-      }, 2000);
-    }
-
-    function stopRenderHeartbeat() {
-      clearInterval(state.renderTimer);
-      state.renderTimer = null;
     }
 
     function cleanupSocket() {
@@ -415,7 +394,6 @@
         setTimeout(doFit, 50);
         setTimeout(() => sendResize(true), 120);
         setTimeout(refocusTerminal, 150);
-        startRenderHeartbeat();
 
         state.pingTimer = setInterval(() => sendMessage('ping'), PING_INTERVAL);
       };
@@ -453,7 +431,6 @@
         state.isConnecting = false;
         state.isConnected = false;
         clearInterval(state.pingTimer);
-        stopRenderHeartbeat();
         if (state.ws === ws) state.ws = null;
         setStatus('disconnected');
 
@@ -491,17 +468,28 @@
       state.term.focus();
     }
 
-    function init() {
+    function loadRenderer(renderer) {
+      if (!state.term) return;
+      if (renderer === 'canvas') {
+        state.term.loadAddon(new CanvasAddon.CanvasAddon());
+        return;
+      }
+      if (renderer === 'webgl') {
+        state.term.loadAddon(new WebglAddon.WebglAddon());
+      }
+    }
+
+    function createTerminal() {
       state.term = new Terminal({
         cursorBlink: false,
         cursorStyle: 'bar',
         cursorInactiveStyle: 'bar',
         cursorWidth: 2,
-        fontSize: 14,
+        fontSize: TERMINAL_FONT_SIZE,
         fontFamily: TERMINAL_FONT_FAMILY,
         fontWeight: '400',
         fontWeightBold: '700',
-        lineHeight: 1.15,
+        lineHeight: TERMINAL_LINE_HEIGHT,
         letterSpacing: 0,
         scrollback: 10000,
         scrollOnUserInput: true,
@@ -510,6 +498,7 @@
         allowProposedApi: true,
         windowsMode: false,
         convertEol: false,
+        customGlyphs: true,
       });
 
       state.fitAddon = new FitAddon.FitAddon();
@@ -518,18 +507,22 @@
 
       const params = new URLSearchParams(location.search);
       const renderer = params.get('renderer');
-      if (renderer === 'webgl') {
+      if (renderer === 'canvas') {
         try {
-          state.term.loadAddon(new WebglAddon.WebglAddon());
+          loadRenderer('canvas');
         } catch (e) {
-          console.warn('WebGL addon failed, falling back to canvas');
-          try { state.term.loadAddon(new CanvasAddon.CanvasAddon()); } catch (_) {}
+          console.warn('Canvas addon failed, using default renderer');
         }
       } else {
         try {
-          state.term.loadAddon(new CanvasAddon.CanvasAddon());
+          loadRenderer('webgl');
         } catch (e) {
-          console.warn('Canvas addon failed, using default renderer');
+          console.warn('WebGL addon failed, falling back to canvas');
+          try {
+            loadRenderer('canvas');
+          } catch (_) {
+            // Use default renderer
+          }
         }
       }
 
@@ -541,24 +534,12 @@
         sendResize(true);
       });
 
-      if (document.fonts && document.fonts.ready) {
-        document.fonts.ready
-          .then(() => {
-            if (!state.term) return;
-            state.term.options.fontFamily = TERMINAL_FONT_FAMILY;
-            scheduleFit();
-            forceRender();
-          })
-          .catch(() => {});
-      }
-
       state.term.onData((data) => {
         sendMessage('input', { data });
       });
 
       state.term.onResize(() => {
         sendResize();
-        forceRender();
       });
 
       const resizeObserver = new ResizeObserver(scheduleFit);
@@ -577,20 +558,12 @@
         if (!document.hidden) {
           refocusTerminal();
           scheduleFit();
-          startRenderHeartbeat();
-        } else {
-          stopRenderHeartbeat();
         }
       });
 
       window.addEventListener('focus', () => {
         refocusTerminal();
         scheduleFit();
-        startRenderHeartbeat();
-      });
-
-      window.addEventListener('blur', () => {
-        stopRenderHeartbeat();
       });
 
       window.addEventListener('beforeunload', () => {
@@ -600,8 +573,20 @@
       });
 
       refocusTerminal();
-      startRenderHeartbeat();
       connect();
+    }
+
+    function init() {
+      var fontsReady = document.fonts
+        ? Promise.all([
+            document.fonts.load(`400 ${TERMINAL_FONT_SIZE}px "Space Mono"`),
+            document.fonts.load(`700 ${TERMINAL_FONT_SIZE}px "Space Mono"`),
+          ]).then(function () {
+            return document.fonts.ready;
+          }).catch(function () {})
+        : Promise.resolve();
+
+      fontsReady.then(createTerminal);
     }
 
     document.addEventListener('DOMContentLoaded', init);

@@ -1325,10 +1325,22 @@
   opacity: 0.7;
 }
 
+.thumbnail-picker-item:disabled {
+  cursor: default;
+}
+
 .thumbnail-picker-item.active {
   opacity: 1;
   outline: none;
   background: transparent;
+}
+
+.thumbnail-picker-item.error {
+  background: var(--bg-tertiary);
+}
+
+.thumbnail-picker-item.error:hover {
+  opacity: 1;
 }
 
 .thumbnail-picker-item img {
@@ -1345,6 +1357,18 @@
 
 .thumbnail-picker-item.loaded img {
   opacity: 1;
+}
+
+.thumbnail-picker-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .thumbnail-picker-skeleton {

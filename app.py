@@ -33,7 +33,7 @@ image = (
         # Install Node.js + npm
         "curl -fsSL https://deb.nodesource.com/setup_22.x | bash -",
         "apt-get install -y nodejs",
-        "npm i -g @openai/codex @qwen-code/qwen-code",
+        "npm i -g @openai/codex @qwen-code/qwen-code @sourcegraph/amp",
         # Install Bun
         "curl -fsSL https://bun.sh/install | bash",
         "ln -s /root/.bun/bin/bun /usr/local/bin/bun",
