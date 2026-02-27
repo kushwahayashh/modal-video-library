@@ -92,7 +92,7 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
     getSpriteForTime,
     pauseControlsHide,
     resumeControlsHide,
-  } = useVideoPlayer({ videoRef, spriteVttUrl, spriteImageUrl });
+  } = useVideoPlayer({ videoRef, videoId, spriteVttUrl, spriteImageUrl });
 
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [fillToEdge, setFillToEdge] = useState(false);

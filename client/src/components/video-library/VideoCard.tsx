@@ -8,6 +8,7 @@ interface VideoCardProps {
   onContextMenu: (e: ReactMouseEvent, video: Video) => void;
   placeholderImages: string[];
   thumbnailOverrides: Record<string, string>;
+  watchProgress?: { currentTime: number; duration: number };
 }
 
 export default function VideoCard({
@@ -16,6 +17,7 @@ export default function VideoCard({
   onContextMenu,
   placeholderImages,
   thumbnailOverrides,
+  watchProgress,
 }: VideoCardProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -67,6 +69,14 @@ export default function VideoCard({
           />
         )}
         {video.duration && <div className="video-duration">{video.duration}</div>}
+        {watchProgress && watchProgress.duration > 0 && (
+          <div className="video-watch-progress">
+            <div
+              className="video-watch-progress-fill"
+              style={{ width: `${Math.min(100, (watchProgress.currentTime / watchProgress.duration) * 100)}%` }}
+            />
+          </div>
+        )}
       </div>
       <div className="video-info">
         <h3 className="video-title">{video.title}</h3>

@@ -25,6 +25,7 @@ function App() {
   const [videoProps, setVideoProps] = useState<VideoProperties | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [processesModalOpen, setProcessesModalOpen] = useState(false);
+  const [watchProgress, setWatchProgress] = useState<Record<string, { currentTime: number; duration: number }>>({});
   const { pushToast: pushToastRaw } = useToast();
   const pushToast = useCallback((message: string, variant: "error" | "success" = "error") => {
     pushToastRaw({ variant, message });
@@ -82,6 +83,19 @@ function App() {
     }, 180);
     return () => window.clearTimeout(timer);
   }, [search]);
+
+  const fetchWatchProgress = useCallback(() => {
+    fetch("/api/watch-progress")
+      .then((r) => r.ok ? r.json() : {})
+      .then((data) => {
+        if (data && typeof data === "object") setWatchProgress(data as Record<string, { currentTime: number; duration: number }>);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchWatchProgress();
+  }, [fetchWatchProgress]);
 
   const openActionModal = (type: ActionModalType, video: Video) => {
     setActionModalClosing(false);
@@ -287,8 +301,9 @@ function App() {
     closeTimerRef.current = window.setTimeout(() => {
       setSelectedVideo(null);
       closeTimerRef.current = null;
+      fetchWatchProgress();
     }, 300);
-  }, []);
+  }, [fetchWatchProgress]);
 
   const handleContextAction = (action: string, video: Video) => {
     switch (action) {
@@ -455,6 +470,7 @@ function App() {
                 onVideoContextMenu={openContextMenu}
                 placeholderImages={placeholderImages}
                 thumbnailOverrides={thumbnailOverrides}
+                watchProgress={watchProgress}
                 hasMore={hasMore}
                 loadingMore={loadingMore}
                 onLoadMore={() => {

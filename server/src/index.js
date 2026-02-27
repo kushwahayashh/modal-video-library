@@ -8,6 +8,7 @@ import { promises as fsp } from "fs";
 import { fileURLToPath } from "url";
 import { createThumbMapStore } from "./lib/thumb-map.js";
 import { createVideoAddedMapStore } from "./lib/video-added-map.js";
+import { createWatchProgressStore } from "./lib/watch-progress-map.js";
 import { createSpriteService } from "./lib/sprite-generation.js";
 import { fileExists, formatBytes } from "./lib/files.js";
 import { parseRangeHeader } from "./lib/http-range.js";
@@ -70,6 +71,7 @@ try {
 
 const { readThumbMap, updateThumbMap } = createThumbMapStore(DATA_DIR);
 const { readVideoAddedMap, updateVideoAddedMap } = createVideoAddedMapStore(DATA_DIR);
+const { readWatchProgress, updateWatchProgress } = createWatchProgressStore(DATA_DIR);
 const { spriteJobs, runSpriteGeneration, isJobRunning } = createSpriteService({
   spritesDir: SPRITES_DIR,
   fileExists,
@@ -471,6 +473,14 @@ app.post("/api/videos/:id/rename", async (request, reply) => {
         }
         return thumbMap;
       });
+
+      await updateWatchProgress((progressMap) => {
+        if (progressMap[id]) {
+          progressMap[newId] = progressMap[id];
+          delete progressMap[id];
+        }
+        return progressMap;
+      });
     }
 
     return { success: true, id: newId, filename: newRelPath };
@@ -509,6 +519,13 @@ app.delete("/api/videos/:id", async (request, reply) => {
         delete addedMap[id];
       }
       return addedMap;
+    });
+
+    await updateWatchProgress((progressMap) => {
+      if (progressMap[id]) {
+        delete progressMap[id];
+      }
+      return progressMap;
     });
 
     spriteJobs.delete(id);
@@ -571,6 +588,35 @@ app.get("/api/sprites/:id/status", async (request) => {
     (await fileExists(path.join(spriteDir, "sprite.vtt")));
 
   return { exists };
+});
+
+app.get("/api/videos/:id/progress", async (request) => {
+  const { id } = request.params;
+  const map = await readWatchProgress();
+  return map[id] || null;
+});
+
+app.post("/api/videos/:id/progress", async (request, reply) => {
+  const { id } = request.params;
+  const { currentTime, duration } = request.body || {};
+
+  if (typeof currentTime !== "number" || typeof duration !== "number") {
+    return reply.status(400).send({ error: "currentTime and duration required" });
+  }
+
+  await updateWatchProgress((map) => {
+    if (duration > 0 && currentTime / duration >= 0.95) {
+      delete map[id];
+    } else {
+      map[id] = { currentTime, duration, updatedAt: new Date().toISOString() };
+    }
+    return map;
+  });
+  return { success: true };
+});
+
+app.get("/api/watch-progress", async () => {
+  return await readWatchProgress();
 });
 
 app.get("/api/stream/:id", async (request, reply) => {

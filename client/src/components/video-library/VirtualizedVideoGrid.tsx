@@ -8,6 +8,7 @@ interface VirtualizedVideoGridProps {
   onVideoContextMenu: (e: ReactMouseEvent, video: Video) => void;
   placeholderImages: string[];
   thumbnailOverrides: Record<string, string>;
+  watchProgress: Record<string, { currentTime: number; duration: number }>;
   hasMore: boolean;
   loadingMore: boolean;
   onLoadMore: () => void;
@@ -31,6 +32,7 @@ export default function VirtualizedVideoGrid({
   onVideoContextMenu,
   placeholderImages,
   thumbnailOverrides,
+  watchProgress,
   hasMore,
   loadingMore,
   onLoadMore,
@@ -162,6 +164,7 @@ export default function VirtualizedVideoGrid({
               onContextMenu={onVideoContextMenu}
               placeholderImages={placeholderImages}
               thumbnailOverrides={thumbnailOverrides}
+              watchProgress={watchProgress[video.id]}
             />
           </div>
         ))}

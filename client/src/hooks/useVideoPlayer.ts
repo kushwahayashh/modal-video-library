@@ -12,6 +12,7 @@ export interface SpriteCue {
 
 interface UseVideoPlayerOptions {
   videoRef: RefObject<HTMLVideoElement | null>;
+  videoId?: string;
   spriteVttUrl?: string;
   spriteImageUrl?: string;
 }
@@ -19,6 +20,7 @@ interface UseVideoPlayerOptions {
 const CONTROLS_HIDE_DELAY_MS = 2500;
 const VOLUME_STORAGE_KEY = "videolib-volume";
 const PLAYBACK_RATE_STORAGE_KEY = "videolib-playback-rate";
+const PROGRESS_SAVE_INTERVAL = 5000;
 
 function parseTimestamp(ts: string): number {
   const parts = ts.trim().split(":");
@@ -79,7 +81,7 @@ function readStoredNumber(key: string, fallback: number): number {
   return fallback;
 }
 
-export function useVideoPlayer({ videoRef, spriteVttUrl, spriteImageUrl }: UseVideoPlayerOptions) {
+export function useVideoPlayer({ videoRef, videoId, spriteVttUrl, spriteImageUrl }: UseVideoPlayerOptions) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [playing, setPlaying] = useState(false);
@@ -435,6 +437,75 @@ export function useVideoPlayer({ videoRef, spriteVttUrl, spriteImageUrl }: UseVi
       }
     };
   }, []);
+
+  // Save watch progress periodically and on pause/unmount
+  const videoIdRef = useRef(videoId);
+  videoIdRef.current = videoId;
+
+  useEffect(() => {
+    if (!videoId) return;
+
+    const saveProgress = () => {
+      const video = videoRef.current;
+      const id = videoIdRef.current;
+      if (!video || !id || !Number.isFinite(video.duration) || video.duration <= 0) return;
+      if (video.currentTime < 2) return;
+
+      fetch(`/api/videos/${id}/progress`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentTime: video.currentTime, duration: video.duration }),
+      }).catch(() => {});
+    };
+
+    const interval = window.setInterval(saveProgress, PROGRESS_SAVE_INTERVAL);
+
+    const video = videoRef.current;
+    const onPause = () => saveProgress();
+    video?.addEventListener("pause", onPause);
+
+    return () => {
+      window.clearInterval(interval);
+      video?.removeEventListener("pause", onPause);
+      saveProgress();
+    };
+  }, [videoId, videoRef]);
+
+  // Restore watch progress on mount
+  useEffect(() => {
+    if (!videoId) return;
+    let cancelled = false;
+
+    const video = videoRef.current;
+    if (!video) return;
+
+    const restore = async () => {
+      try {
+        const res = await fetch(`/api/videos/${videoId}/progress`);
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (cancelled || !data || typeof data.currentTime !== "number") return;
+        if (data.currentTime < 2) return;
+
+        const applySeek = () => {
+          if (cancelled) return;
+          video.currentTime = data.currentTime;
+        };
+
+        if (video.readyState >= 1) {
+          applySeek();
+        } else {
+          video.addEventListener("loadedmetadata", applySeek, { once: true });
+        }
+      } catch {}
+    };
+
+    restore();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [videoId, videoRef]);
 
   return {
     playing,
