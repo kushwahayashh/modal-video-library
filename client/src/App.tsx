@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import { IconFolderOpen, IconSearch, IconSearchOff } from "@tabler/icons-react";
+import { IconFolderOpen, IconSearch, IconSearchOff, IconX } from "@tabler/icons-react";
 import "./App.css";
 import type { Video } from "./types";
 import { useSpriteProgress, type SpriteProgressJob } from "./hooks/useSpriteProgress";
@@ -25,6 +25,7 @@ function App() {
   const [videoProps, setVideoProps] = useState<VideoProperties | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [processesModalOpen, setProcessesModalOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [watchProgress, setWatchProgress] = useState<Record<string, { currentTime: number; duration: number }>>({});
   const { pushToast: pushToastRaw } = useToast();
   const pushToast = useCallback((message: string, variant: "error" | "success" = "error") => {
@@ -387,10 +388,16 @@ function App() {
           closeModal();
         }
       }
+      if (e.key === "/" && !hasOpenModal) {
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedVideo, closeModal, actionModal, processesModalOpen]);
+  }, [selectedVideo, closeModal, actionModal, processesModalOpen, hasOpenModal]);
 
   return (
     <div className={`app${hasOpenModal ? " modal-open" : ""}`}>
@@ -403,12 +410,24 @@ function App() {
           <div className="nav-search-wrapper">
             <IconSearch size={18} className={`nav-search-icon${isSearchPending ? " searching" : ""}`} />
             <input
+              ref={searchInputRef}
               type="text"
               className="nav-search"
-              placeholder="Search videos..."
+              placeholder="Search videos…  /"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+            {search && (
+              <button
+                type="button"
+                className="nav-search-clear"
+                onClick={() => { setSearch(""); searchInputRef.current?.focus(); }}
+                aria-label="Clear search"
+              >
+                <IconX size={16} />
+              </button>
+            )}
+
           </div>
 
           <div className="nav-right">

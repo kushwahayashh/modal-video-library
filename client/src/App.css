@@ -76,7 +76,7 @@
 
 .nav-search {
   width: 100%;
-  padding: 10px 16px 10px 40px;
+  padding: 10px 36px 10px 40px;
   background: var(--bg-tertiary);
   border: none;
   color: var(--text-primary);
@@ -92,6 +92,29 @@
 .nav-search:focus {
   outline: none;
   background: var(--bg-tertiary);
+}
+
+.nav-search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  border-radius: 4px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.nav-search-clear:hover {
+  color: var(--text-primary);
+  background: var(--bg-card);
 }
 
 .nav-right {

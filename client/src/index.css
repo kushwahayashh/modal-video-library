@@ -38,6 +38,10 @@ body,
   scroll-behavior: smooth;
 }
 
+html {
+  overflow-y: scroll;
+}
+
 body {
   font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
   background-color: var(--bg-primary);
