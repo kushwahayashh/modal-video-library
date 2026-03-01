@@ -1,8 +1,18 @@
+import path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { promises as fsp } from "fs";
 
 const execFileAsync = promisify(execFile);
+
+export function safeResolve(baseDir, relativePath) {
+  const base = path.resolve(baseDir);
+  const resolved = path.resolve(base, relativePath);
+  if (resolved !== base && !resolved.startsWith(base + path.sep)) {
+    return null;
+  }
+  return resolved;
+}
 
 export const VIDEO_EXTENSIONS = new Set([".mp4", ".mkv", ".avi", ".webm", ".mov"]);
 export const VIDEO_MIME_TYPES = {

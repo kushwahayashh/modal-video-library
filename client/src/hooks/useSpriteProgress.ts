@@ -9,6 +9,9 @@ export interface SpriteProgressJob {
   error: string | null;
 }
 
+const ACTIVE_POLL_INTERVAL = 1000;
+const IDLE_POLL_INTERVAL = 30000;
+
 export function useSpriteProgress(onJobSettled?: (job: SpriteProgressJob) => void) {
   const [activeSpriteJobs, setActiveSpriteJobs] = useState<SpriteProgressJob[]>([]);
   const seenActiveJobIdsRef = useRef(new Set<string>());
@@ -18,11 +21,14 @@ export function useSpriteProgress(onJobSettled?: (job: SpriteProgressJob) => voi
 
   useEffect(() => {
     let active = true;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
     const pollProgress = async () => {
+      let hasRunning = false;
+
       try {
         const res = await fetch("/api/sprites/progress");
-        if (!res.ok) return;
+        if (!res.ok || !active) return;
 
         const data = (await res.json()) as { jobs?: SpriteProgressJob[] };
         const jobs = Array.isArray(data.jobs) ? data.jobs : [];
@@ -45,18 +51,23 @@ export function useSpriteProgress(onJobSettled?: (job: SpriteProgressJob) => voi
           onJobSettledRef.current?.(job);
         }
 
+        hasRunning = runningJobs.length > 0;
         setActiveSpriteJobs(runningJobs);
       } catch {
         // Ignore polling errors; next tick retries.
+      } finally {
+        if (active) {
+          const delay = hasRunning ? ACTIVE_POLL_INTERVAL : IDLE_POLL_INTERVAL;
+          timeoutId = setTimeout(pollProgress, delay);
+        }
       }
     };
 
     pollProgress();
-    const interval = setInterval(pollProgress, 1000);
 
     return () => {
       active = false;
-      clearInterval(interval);
+      if (timeoutId) clearTimeout(timeoutId);
     };
   }, []);
 

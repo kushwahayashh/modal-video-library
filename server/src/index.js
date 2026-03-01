@@ -6,9 +6,7 @@ import path from "path";
 import fs from "fs";
 import { promises as fsp } from "fs";
 import { fileURLToPath } from "url";
-import { createThumbMapStore } from "./lib/thumb-map.js";
-import { createVideoAddedMapStore } from "./lib/video-added-map.js";
-import { createWatchProgressStore } from "./lib/watch-progress-map.js";
+import { createJsonMapStore } from "./lib/json-map-store.js";
 import { createSpriteService } from "./lib/sprite-generation.js";
 import { fileExists } from "./lib/files.js";
 import { registerVideoRoutes } from "./routes/videos.js";
@@ -63,9 +61,9 @@ try {
   // Images folder might be missing; ignore
 }
 
-const { readThumbMap, updateThumbMap } = createThumbMapStore(DATA_DIR);
-const { readVideoAddedMap, updateVideoAddedMap } = createVideoAddedMapStore(DATA_DIR);
-const { readWatchProgress, updateWatchProgress } = createWatchProgressStore(DATA_DIR);
+const { read: readThumbMap, update: updateThumbMap } = createJsonMapStore(DATA_DIR, "thumbnail-map.json");
+const { read: readVideoAddedMap, update: updateVideoAddedMap } = createJsonMapStore(DATA_DIR, "video-added-map.json");
+const { read: readWatchProgress, update: updateWatchProgress } = createJsonMapStore(DATA_DIR, "watch-progress-map.json");
 const { spriteJobs, runSpriteGeneration, isJobRunning } = createSpriteService({
   spritesDir: SPRITES_DIR,
   fileExists,

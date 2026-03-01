@@ -311,7 +311,7 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
       onPointerDown={() => containerRef.current?.focus()}
     >
       <video ref={videoRef} onClick={togglePlay} playsInline preload="metadata">
-        <source src={`/api/stream/${videoId}`} type="video/mp4" />
+        <source src={`/api/stream/${videoId}`} />
       </video>
 
       {!playing && (

@@ -6,6 +6,7 @@ import {
   VIDEO_MIME_TYPES,
   toBase64Url,
   fromBase64Url,
+  safeResolve,
   getVideoDuration,
   getVideoMetadata,
 } from "../lib/video-utils.js";
@@ -151,7 +152,7 @@ export function registerVideoRoutes(app, deps) {
             addedAt,
             thumbnail,
             duration,
-            hasSprites: fs.existsSync(path.join(SPRITES_DIR, videoId, "sprite.jpg")),
+            hasSprites: await fileExists(path.join(SPRITES_DIR, videoId, "sprite.jpg")),
           };
         } catch {
           return null;
@@ -221,7 +222,8 @@ export function registerVideoRoutes(app, deps) {
   app.get("/api/videos/:id", async (request, reply) => {
     const { id } = request.params;
     const filename = fromBase64Url(id);
-    const filePath = path.join(VIDEOS_DIR, filename);
+    const filePath = safeResolve(VIDEOS_DIR, filename);
+    if (!filePath) return reply.status(400).send({ error: "Invalid video ID" });
 
     if (!(await fileExists(filePath))) {
       return reply.status(404).send({ error: "Video not found" });
@@ -257,7 +259,8 @@ export function registerVideoRoutes(app, deps) {
     }
 
     const oldFilename = fromBase64Url(id);
-    const oldPath = path.join(VIDEOS_DIR, oldFilename);
+    const oldPath = safeResolve(VIDEOS_DIR, oldFilename);
+    if (!oldPath) return reply.status(400).send({ error: "Invalid video ID" });
 
     if (!(await fileExists(oldPath))) {
       return reply.status(404).send({ error: "Video not found" });
@@ -341,7 +344,8 @@ export function registerVideoRoutes(app, deps) {
   app.delete("/api/videos/:id", async (request, reply) => {
     const { id } = request.params;
     const filename = fromBase64Url(id);
-    const filePath = path.join(VIDEOS_DIR, filename);
+    const filePath = safeResolve(VIDEOS_DIR, filename);
+    if (!filePath) return reply.status(400).send({ error: "Invalid video ID" });
 
     if (!(await fileExists(filePath))) {
       return reply.status(404).send({ error: "Video not found" });
@@ -413,7 +417,8 @@ export function registerVideoRoutes(app, deps) {
   app.get("/api/stream/:id", async (request, reply) => {
     const { id } = request.params;
     const filename = fromBase64Url(id);
-    const filePath = path.join(VIDEOS_DIR, filename);
+    const filePath = safeResolve(VIDEOS_DIR, filename);
+    if (!filePath) return reply.status(400).send({ error: "Invalid video ID" });
 
     if (!(await fileExists(filePath))) {
       return reply.status(404).send({ error: "Video not found" });

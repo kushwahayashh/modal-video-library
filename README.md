@@ -32,8 +32,7 @@ Self-hosted video library for local or Modal runtime.
 │   ├── src/App.tsx             # Video library page orchestration
 │   ├── src/components/         # Modals, cards, context menu, player
 │   └── src/hooks/              # Data/polling/player/state hooks
-├── images/                     # Placeholder images served by backend
-└── docs/                       # Architecture/API/runtime documentation
+└── images/                     # Placeholder images served by backend
 ```
 
 ## Quick start
@@ -89,7 +88,7 @@ Default `DATA_DIR` is `/data`.
 - `GET /api/stream/:id` (or `?download=1`)
 - `GET /ws/terminal` (WebSocket)
 
-Full reference: `docs/backend-api.md`.
+Full reference in source: `server/src/routes/`.
 
 ## Environment variables
 
@@ -106,9 +105,4 @@ Full reference: `docs/backend-api.md`.
 cd server && bun run test
 ```
 
-## Documentation
 
-- `docs/README.md` documentation index
-- `docs/runtime-and-operations.md` runbooks and operational behavior
-- `docs/architecture.md` system architecture and request flows
-- `docs/frontend-overview.md` and `docs/backend-overview.md` implementation maps

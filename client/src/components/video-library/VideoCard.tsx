@@ -1,5 +1,5 @@
 import "./VideoCard.css";
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { Video } from "../../types";
 import { getStablePlaceholder } from "./helpers";
 
@@ -20,27 +20,7 @@ export default function VideoCard({
   thumbnailOverrides,
   watchProgress,
 }: VideoCardProps) {
-  const [isVisible, setIsVisible] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
-  const cardRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "100px" }
-    );
-
-    if (cardRef.current) {
-      observer.observe(cardRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, []);
 
   const stablePlaceholderKey =
     `${video.addedAt || video.createdAt || ""}|${video.sizeBytes || 0}|${video.duration || ""}`;
@@ -57,10 +37,10 @@ export default function VideoCard({
   };
 
   return (
-    <div ref={cardRef} className="video-card" onClick={onClick} onContextMenu={handleContextMenu}>
+    <div className="video-card" onClick={onClick} onContextMenu={handleContextMenu}>
       <div className="video-thumbnail">
         <div className="video-placeholder skeleton"></div>
-        {isVisible && imgSrc && (
+        {imgSrc && (
           <img
             src={imgSrc}
             alt=""

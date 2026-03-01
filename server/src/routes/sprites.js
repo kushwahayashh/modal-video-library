@@ -1,6 +1,6 @@
 import path from "path";
 import fs from "fs";
-import { fromBase64Url } from "../lib/video-utils.js";
+import { fromBase64Url, safeResolve } from "../lib/video-utils.js";
 import { fileExists } from "../lib/files.js";
 
 export function registerSpriteRoutes(app, deps) {
@@ -9,7 +9,8 @@ export function registerSpriteRoutes(app, deps) {
   app.post("/api/videos/:id/sprites", async (request, reply) => {
     const { id } = request.params;
     const filename = fromBase64Url(id);
-    const filePath = path.join(VIDEOS_DIR, filename);
+    const filePath = safeResolve(VIDEOS_DIR, filename);
+    if (!filePath) return reply.status(400).send({ error: "Invalid video ID" });
 
     if (!(await fileExists(filePath))) {
       return reply.status(404).send({ error: "Video not found" });
