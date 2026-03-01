@@ -1,3 +1,4 @@
+import "./ContextMenu.css";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { IconPlayerPlayFilled, IconDownload, IconTrash, IconEdit, IconCopy, IconInfoCircle, IconLayoutGrid, IconPhoto } from "@tabler/icons-react";
 import type { Video } from "../../types";

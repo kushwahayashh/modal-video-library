@@ -1,3 +1,4 @@
+import "./VideoActionModal.css";
 import { useId, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { Video } from "../../types";
 import { formatBytes, formatDate } from "../../utils";
@@ -35,8 +36,6 @@ interface DetailItem {
   label: string;
   value: string;
 }
-
-
 
 export default function VideoActionModal({
   actionModal,

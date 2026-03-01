@@ -1,20 +1,18 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
 import App from "./App";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { ToastProvider } from "./components/ToastProvider";
 import ToastStack from "./components/ToastStack";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <ErrorBoundary>
       <ToastProvider>
-        <Routes>
-          <Route path="/" element={<App />} />
-        </Routes>
+        <App />
         <ToastStack />
       </ToastProvider>
-    </BrowserRouter>
+    </ErrorBoundary>
   </React.StrictMode>
 );

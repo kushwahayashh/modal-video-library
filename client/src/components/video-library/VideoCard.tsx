@@ -1,3 +1,4 @@
+import "./VideoCard.css";
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { Video } from "../../types";
 import { getStablePlaceholder } from "./helpers";

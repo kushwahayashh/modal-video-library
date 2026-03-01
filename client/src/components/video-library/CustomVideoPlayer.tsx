@@ -1,3 +1,4 @@
+import "./CustomVideoPlayer.css";
 import {
   useRef,
   useState,
@@ -49,8 +50,6 @@ function FillModeIcon({ fill, size }: { fill: boolean; size: number }) {
     </svg>
   );
 }
-
-
 
 function formatTime(seconds: number): string {
   if (!isFinite(seconds) || seconds < 0) return "0:00";

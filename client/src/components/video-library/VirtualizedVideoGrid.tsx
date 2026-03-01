@@ -1,3 +1,4 @@
+import "./VirtualizedVideoGrid.css";
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { Video } from "../../types";
 import VideoCard from "./VideoCard";

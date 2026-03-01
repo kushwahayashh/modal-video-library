@@ -9,20 +9,13 @@
   },
   "dependencies": {
     "@tabler/icons-react": "^3.37.1",
-    "lucide-react": "^0.563.0",
-    "plyr": "^3.8.4",
-    "plyr-react": "^6.0.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^7.13.0"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@types/react": "^19.2.10",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^4.3.0",
-    "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.38",
-    "tailwindcss": "^3.4.3",
     "typescript": "^5.9.3",
     "vite": "^5.4.0"
   }

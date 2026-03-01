@@ -15,7 +15,6 @@ interface UseVideoLibraryDataResult {
   loading: boolean;
   loadingMore: boolean;
   hasMore: boolean;
-
   videosError: string | null;
   placeholderImages: string[];
   placeholdersLoading: boolean;

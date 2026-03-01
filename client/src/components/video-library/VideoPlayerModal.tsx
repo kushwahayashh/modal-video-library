@@ -1,3 +1,4 @@
+import "./VideoPlayerModal.css";
 import { useId, useRef } from "react";
 import { IconCheck } from "@tabler/icons-react";
 import type { Video } from "../../types";

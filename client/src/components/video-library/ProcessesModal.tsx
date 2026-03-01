@@ -1,3 +1,5 @@
+import "./VideoActionModal.css";
+import "./ProcessesModal.css";
 import { useId, useRef } from "react";
 import type { SpriteProgressJob } from "../../hooks/useSpriteProgress";
 import { useDialogFocusTrap } from "../../hooks/useDialogFocusTrap";
