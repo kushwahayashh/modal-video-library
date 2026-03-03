@@ -7,7 +7,7 @@ import { useVideoLibraryData } from "./hooks/useVideoLibraryData";
 import { useContextMenuState } from "./hooks/useContextMenuState";
 import { useActionModal } from "./hooks/useActionModal";
 import { useVideoActions } from "./hooks/useVideoActions";
-import { useToast } from "./components/ToastProvider";
+import { toast } from "sonner";
 import ContextMenu from "./components/video-library/ContextMenu";
 import VirtualizedVideoGrid from "./components/video-library/VirtualizedVideoGrid";
 import VideoPlayerModal from "./components/video-library/VideoPlayerModal";
@@ -22,10 +22,6 @@ function App() {
   const [processesModalOpen, setProcessesModalOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [watchProgress, setWatchProgress] = useState<Record<string, { currentTime: number; duration: number }>>({});
-  const { pushToast: pushToastRaw } = useToast();
-  const pushToast = useCallback((message: string, variant: "error" | "success" = "error") => {
-    pushToastRaw({ variant, message });
-  }, [pushToastRaw]);
   const closeTimerRef = useRef<number | null>(null);
   const { contextMenu, openContextMenu, closeContextMenu } = useContextMenuState();
   const {
@@ -43,7 +39,7 @@ function App() {
     loadMoreVideos,
     updateThumbnailOverride,
   } = useVideoLibraryData({
-    onThumbnailSaveError: (message) => pushToast(message),
+    onThumbnailSaveError: (message) => toast.error(message),
     searchQuery: debouncedSearch,
   });
   const {
@@ -69,7 +65,6 @@ function App() {
     setThumbnailOverrides,
     setActionLoading,
     closeActionModal,
-    pushToast,
   });
 
   useEffect(() => {
@@ -94,9 +89,9 @@ function App() {
 
   const handleSpriteJobSettled = useCallback((job: SpriteProgressJob) => {
     if (job.status === "error") {
-      pushToast(job.error || "Sprite generation failed");
+      toast.error(job.error || "Sprite generation failed");
     } else if (job.status === "done") {
-      pushToast(`Sprites ready: ${job.title}`, "success");
+      toast.success(`Sprites ready: ${job.title}`);
       setVideos((prev) =>
         prev.map((videoItem) =>
           videoItem.id === job.videoId ? { ...videoItem, hasSprites: true } : videoItem
@@ -106,9 +101,15 @@ function App() {
         prev && prev.id === job.videoId ? { ...prev, hasSprites: true } : prev
       );
     }
-  }, [pushToast]);
+  }, []);
 
-  const activeSpriteJobs = useSpriteProgress(handleSpriteJobSettled);
+  const { activeSpriteJobs, refresh: refreshSpriteProgress } = useSpriteProgress(handleSpriteJobSettled);
+
+  useEffect(() => {
+    if (processesModalOpen && activeSpriteJobs.length === 0) {
+      setProcessesModalOpen(false);
+    }
+  }, [activeSpriteJobs.length, processesModalOpen]);
 
   const openModal = (video: Video) => {
     if (closeTimerRef.current !== null) {
@@ -155,8 +156,8 @@ function App() {
         break;
       case "copy-link":
         navigator.clipboard.writeText(`${window.location.origin}/api/stream/${video.id}`)
-          .then(() => pushToast("Video link copied", "success"))
-          .catch(() => pushToast("Failed to copy video link"));
+          .then(() => toast.success("Video link copied"))
+          .catch(() => toast.error("Failed to copy video link"));
         break;
       case "rename":
         openActionModal("rename", video);
@@ -165,7 +166,7 @@ function App() {
         openActionModal("properties", video);
         break;
       case "sprites":
-        generateSprites(video);
+        generateSprites(video).then(refreshSpriteProgress);
         break;
       case "thumbnail":
         openActionModal("thumbnail", video);
@@ -178,7 +179,7 @@ function App() {
 
   const hasActiveSearch = debouncedSearch.length > 0;
   const isSearchPending = search.trim() !== debouncedSearch;
-  const hasOpenModal = (modalVisible && !!selectedVideo) || !!actionModal || processesModalOpen;
+  const hasOpenModal = !!selectedVideo || !!actionModal || processesModalOpen;
 
   useEffect(() => {
     const { body, documentElement } = document;
@@ -380,7 +381,7 @@ function App() {
         onThumbnailSelect={(image) => {
           if (!actionVideo) return;
           void updateThumbnailOverride(actionVideo.id, image);
-          pushToast("Thumbnail updated", "success");
+          toast.success("Thumbnail updated");
           closeActionModal();
         }}
       />

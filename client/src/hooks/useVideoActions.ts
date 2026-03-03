@@ -1,4 +1,5 @@
 import { useCallback, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type SetStateAction } from "react";
+import { toast } from "sonner";
 import type { Video } from "../types";
 
 interface UseVideoActionsOptions {
@@ -9,7 +10,6 @@ interface UseVideoActionsOptions {
   setThumbnailOverrides: Dispatch<SetStateAction<Record<string, string>>>;
   setActionLoading: (loading: boolean) => void;
   closeActionModal: () => void;
-  pushToast: (message: string, variant?: "error" | "success") => void;
 }
 
 function getApiErrorMessage(payload: unknown, fallback: string) {
@@ -33,7 +33,6 @@ export function useVideoActions({
   setThumbnailOverrides,
   setActionLoading,
   closeActionModal,
-  pushToast,
 }: UseVideoActionsOptions) {
   const confirmRename = useCallback(async () => {
     if (!renameValue.trim() || !actionVideo) return;
@@ -102,14 +101,14 @@ export function useVideoActions({
           title: trimmedName,
         };
       });
-      pushToast(`Renamed: ${actionVideo.title}`, "success");
+      toast.success(`Renamed: ${actionVideo.title}`);
       closeActionModal();
     } catch (e) {
-      pushToast(e instanceof Error ? e.message : "Failed to rename");
+      toast.error(e instanceof Error ? e.message : "Failed to rename");
     } finally {
       setActionLoading(false);
     }
-  }, [renameValue, actionVideo, pushToast, setVideos, setSelectedVideo, setThumbnailOverrides, setActionLoading, closeActionModal]);
+  }, [renameValue, actionVideo, setVideos, setSelectedVideo, setThumbnailOverrides, setActionLoading, closeActionModal]);
 
   const confirmDelete = useCallback(async () => {
     if (!actionVideo) return;
@@ -120,20 +119,21 @@ export function useVideoActions({
       });
       if (!res.ok) throw new Error("Failed to delete");
       setVideos((prev) => prev.filter((videoItem) => videoItem.id !== actionVideo.id));
+      setSelectedVideo((prev) => (prev && prev.id === actionVideo.id ? null : prev));
       setThumbnailOverrides((prev) => {
         if (!(actionVideo.id in prev)) return prev;
         const next = { ...prev };
         delete next[actionVideo.id];
         return next;
       });
-      pushToast(`Deleted: ${actionVideo.title}`, "success");
+      toast.success(`Deleted: ${actionVideo.title}`);
       closeActionModal();
     } catch {
-      pushToast("Failed to delete video");
+      toast.error("Failed to delete video");
     } finally {
       setActionLoading(false);
     }
-  }, [actionVideo, pushToast, setVideos, setThumbnailOverrides, setActionLoading, closeActionModal]);
+  }, [actionVideo, setVideos, setSelectedVideo, setThumbnailOverrides, setActionLoading, closeActionModal]);
 
   const generateSprites = useCallback(async (video: Video) => {
     try {
@@ -147,11 +147,11 @@ export function useVideoActions({
       if (!res.ok) {
         throw new Error(getApiErrorMessage(payload, "Failed to generate sprites"));
       }
-      pushToast(`Sprite generation started: ${video.title}`, "success");
+      toast.success(`Sprite generation started: ${video.title}`);
     } catch (e) {
-      pushToast(e instanceof Error ? e.message : "Failed to generate sprites");
+      toast.error(e instanceof Error ? e.message : "Failed to generate sprites");
     }
-  }, [pushToast]);
+  }, []);
 
   const handleRenameKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") confirmRename();

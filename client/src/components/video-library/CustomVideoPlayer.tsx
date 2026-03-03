@@ -8,7 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
-import { IconPlayerPlayFilled, IconPlayerPauseFilled, IconMaximize, IconMinimize, IconGauge, IconPlayerTrackPrevFilled, IconPlayerTrackNextFilled, IconVolume, IconVolume2, IconVolumeOff } from "@tabler/icons-react";
+import { IconPlayerPlayFilled, IconPlayerPauseFilled, IconMaximize, IconMinimize, IconBrandSpeedtest, IconRewindBackward5, IconRewindForward5, IconVolume, IconVolume2, IconVolumeOff, IconSelectAll } from "@tabler/icons-react";
 import { useVideoPlayer, type SpriteCue } from "../../hooks/useVideoPlayer";
 
 interface CustomVideoPlayerProps {
@@ -38,19 +38,6 @@ const SPRITE_MIN_EDGE = 28;
 const BIG_PLAY_ICON_SIZE = 44;
 const CONTROL_ICON_SIZE = 26;
 
-function FillModeIcon({ fill, size }: { fill: boolean; size: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-      <rect x="3.5" y="3.5" width="17" height="17" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-      {fill ? (
-        <rect x="7.25" y="7.25" width="9.5" height="9.5" rx="1.2" fill="currentColor" />
-      ) : (
-        <rect x="7.25" y="7.25" width="9.5" height="9.5" rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.6" />
-      )}
-    </svg>
-  );
-}
-
 function formatTime(seconds: number): string {
   if (!isFinite(seconds) || seconds < 0) return "0:00";
   const h = Math.floor(seconds / 3600);
@@ -66,6 +53,7 @@ function formatTime(seconds: number): string {
 export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
+  const volumeTrackRef = useRef<HTMLDivElement>(null);
   const speedMenuRef = useRef<HTMLDivElement>(null);
 
   const spriteVttUrl = hasSprites ? `/api/sprites/${videoId}/vtt` : undefined;
@@ -290,6 +278,50 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
     seek(currentTime + delta);
   }, [currentTime, seek]);
 
+  const handleVolumePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    e.preventDefault();
+
+    const wrap = e.currentTarget;
+    const trackEl = volumeTrackRef.current;
+    if (!trackEl) return;
+
+    const pointerId = e.pointerId;
+    const update = (clientX: number) => {
+      const rect = trackEl.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      setVolume(ratio);
+    };
+
+    update(e.clientX);
+
+    let captured = false;
+    const onMove = (ev: PointerEvent) => {
+      if (!captured) {
+        captured = true;
+        wrap.classList.add("vp-volume-dragging");
+        if (!wrap.hasPointerCapture(pointerId)) {
+          wrap.setPointerCapture(pointerId);
+        }
+      }
+      update(ev.clientX);
+    };
+    const cleanup = () => {
+      if (captured && wrap.hasPointerCapture(pointerId)) {
+        wrap.releasePointerCapture(pointerId);
+      }
+      wrap.classList.remove("vp-volume-dragging");
+      wrap.removeEventListener("pointermove", onMove);
+      wrap.removeEventListener("pointerup", cleanup);
+      wrap.removeEventListener("pointercancel", cleanup);
+    };
+
+    wrap.addEventListener("pointermove", onMove);
+    wrap.addEventListener("pointerup", cleanup);
+    wrap.addEventListener("pointercancel", cleanup);
+  }, [setVolume]);
+
   const playedPercent = duration ? (currentTime / duration) * 100 : 0;
   const bufferedPercent = buffered * 100;
 
@@ -377,11 +409,11 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
             </button>
 
             <button className="vp-btn" onClick={() => handleSeekStep(-5)} aria-label="Seek backward 5 seconds" title="Back 5 seconds">
-              <IconPlayerTrackPrevFilled size={CONTROL_ICON_SIZE} />
+              <IconRewindBackward5 size={CONTROL_ICON_SIZE} />
             </button>
 
             <button className="vp-btn" onClick={() => handleSeekStep(5)} aria-label="Seek forward 5 seconds" title="Forward 5 seconds">
-              <IconPlayerTrackNextFilled size={CONTROL_ICON_SIZE} />
+              <IconRewindForward5 size={CONTROL_ICON_SIZE} />
             </button>
 
             <div className="vp-volume-group" onWheel={handleVolumeWheel}>
@@ -390,25 +422,9 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
               </button>
               <div
                 className="vp-volume-slider-wrap"
-                onPointerDown={(e) => {
-                  const track = e.currentTarget;
-                  const update = (clientX: number) => {
-                    const rect = track.getBoundingClientRect();
-                    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-                    setVolume(ratio);
-                  };
-                  update(e.clientX);
-                  track.setPointerCapture(e.pointerId);
-                  const onMove = (ev: PointerEvent) => update(ev.clientX);
-                  const onUp = () => {
-                    track.removeEventListener("pointermove", onMove);
-                    track.removeEventListener("pointerup", onUp);
-                  };
-                  track.addEventListener("pointermove", onMove);
-                  track.addEventListener("pointerup", onUp);
-                }}
+                onPointerDown={handleVolumePointerDown}
               >
-                <div className="vp-volume-track">
+                <div ref={volumeTrackRef} className="vp-volume-track">
                   <div className="vp-volume-fill" style={{ width: `${(muted ? 0 : volume) * 100}%` }}>
                     <div className="vp-volume-knob" />
                   </div>
@@ -429,7 +445,7 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
                 aria-label={`Playback speed ${playbackRate}x`}
                 title={`Playback speed ${playbackRate}x`}
               >
-                <IconGauge size={CONTROL_ICON_SIZE - 2} />
+                <IconBrandSpeedtest size={CONTROL_ICON_SIZE - 2} />
               </button>
               {showSpeedMenu && (
                 <div className="vp-speed-menu">
@@ -456,7 +472,7 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
               title={fillToEdge ? "Fit video in frame" : "Fill video to edges"}
               aria-pressed={fillToEdge}
             >
-              <FillModeIcon fill={fillToEdge} size={CONTROL_ICON_SIZE - 1} />
+              <IconSelectAll size={CONTROL_ICON_SIZE - 1} />
             </button>
 
             <button className="vp-btn" onClick={toggleFullscreen} aria-label="Fullscreen">
