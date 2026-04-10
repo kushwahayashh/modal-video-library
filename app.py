@@ -33,7 +33,7 @@ image = (
         # Install Node.js + npm
         "curl -fsSL https://deb.nodesource.com/setup_22.x | bash -",
         "apt-get install -y nodejs",
-        "npm i -g @openai/codex @qwen-code/qwen-code @sourcegraph/amp",
+        "npm i -g @openai/codex @qwen-code/qwen-code @sourcegraph/amp @mariozechner/pi-coding-agent",
         # Install Bun
         "curl -fsSL https://bun.sh/install | bash",
         "ln -s /root/.bun/bin/bun /usr/local/bin/bun",
@@ -55,9 +55,13 @@ image = (
     )
     # Copy package.json files first (for dependency caching)
     .add_local_file("server/package.json", "/app/server/package.json", copy=True)
-    .add_local_file("server/package-lock.json", "/app/server/package-lock.json", copy=True)
+    .add_local_file(
+        "server/package-lock.json", "/app/server/package-lock.json", copy=True
+    )
     .add_local_file("client/package.json", "/app/client/package.json", copy=True)
-    .add_local_file("client/package-lock.json", "/app/client/package-lock.json", copy=True)
+    .add_local_file(
+        "client/package-lock.json", "/app/client/package-lock.json", copy=True
+    )
     .add_local_file("client/vite.config.js", "/app/client/vite.config.js", copy=True)
     .add_local_file("client/index.html", "/app/client/index.html", copy=True)
     # Install dependencies during image build (bun handles native modules)
@@ -133,7 +137,9 @@ _REDIRECT_TEMPLATE = _load_redirect_template()
 def _tunnel_redirect_page(tunnel_url: str, poll_url: str):
     from fastapi.responses import HTMLResponse
 
-    html = _REDIRECT_TEMPLATE.replace("{{TUNNEL_URL}}", tunnel_url).replace("{{POLL_URL}}", poll_url)
+    html = _REDIRECT_TEMPLATE.replace("{{TUNNEL_URL}}", tunnel_url).replace(
+        "{{POLL_URL}}", poll_url
+    )
     return HTMLResponse(content=html, headers=_no_cache_headers())
 
 
@@ -141,6 +147,7 @@ def _tunnel_redirect_page(tunnel_url: str, poll_url: str):
     timeout=86400,
     volumes={"/data": volume},
     env={"HOME": "/data/.home"},
+    secrets=[modal.Secret.from_name("gemini-key")],
 )
 def run():
     import re
@@ -255,7 +262,9 @@ def run():
             log(f"  Starting tunnel... \033[31mfailed\033[0m")
             tunnel_ready.set()
 
-    capture_thread = threading.Thread(target=capture_cf_url, args=(cf_proc,), daemon=True)
+    capture_thread = threading.Thread(
+        target=capture_cf_url, args=(cf_proc,), daemon=True
+    )
     capture_thread.start()
 
     # Build client in parallel with tunnel startup
@@ -350,8 +359,12 @@ def run():
                 try:
                     runtime_status = fetch_runtime_status()
                     if runtime_status:
-                        terminal_count = int(runtime_status.get("terminalConnectionCount", 0) or 0)
-                        active_jobs = int(runtime_status.get("activeSpriteJobs", 0) or 0)
+                        terminal_count = int(
+                            runtime_status.get("terminalConnectionCount", 0) or 0
+                        )
+                        active_jobs = int(
+                            runtime_status.get("activeSpriteJobs", 0) or 0
+                        )
                         last_activity_ms = runtime_status.get("lastActivityAt")
                         last_activity_ts = (
                             float(last_activity_ms) / 1000.0
@@ -360,7 +373,11 @@ def run():
                         )
                         idle_for = max(0.0, now_ts - last_activity_ts)
 
-                        if terminal_count <= 0 and active_jobs <= 0 and idle_for >= IDLE_TIMEOUT_SECONDS:
+                        if (
+                            terminal_count <= 0
+                            and active_jobs <= 0
+                            and idle_for >= IDLE_TIMEOUT_SECONDS
+                        ):
                             log("  Idle timeout reached (2h). Stopping app...")
                             break
                 except Exception:
@@ -384,12 +401,14 @@ def launch(fmt: str = ""):
     Append ?fmt=json to poll status without the HTML page."""
     from fastapi.responses import JSONResponse
 
-    poll_url = launch.web_url + "?fmt=json"
+    poll_url = launch.get_web_url() + "?fmt=json"
     wants_json = fmt.lower() == "json"
 
     state, err = _read_runtime_state()
     if err:
-        return JSONResponse({"error": str(err)}, status_code=500, headers=_no_cache_headers())
+        return JSONResponse(
+            {"error": str(err)}, status_code=500, headers=_no_cache_headers()
+        )
 
     now_ts = time.time()
 
@@ -409,7 +428,10 @@ def launch(fmt: str = ""):
         cf_url_store.pop("launching", None)
 
     launch_ts = state.get("launching")
-    launch_lock_active = isinstance(launch_ts, (int, float)) and (now_ts - launch_ts) < START_LOCK_TTL_SECONDS
+    launch_lock_active = (
+        isinstance(launch_ts, (int, float))
+        and (now_ts - launch_ts) < START_LOCK_TTL_SECONDS
+    )
     should_spawn = not launch_lock_active and not _is_run_alive(state, now_ts)
 
     if should_spawn:

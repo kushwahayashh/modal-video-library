@@ -15,14 +15,13 @@ Self-hosted video library for local or Modal runtime.
 
 - Frontend: React 18 + TypeScript + Vite
 - Backend: Bun + Fastify + Fastify WebSocket
-- Runtime launcher: Python (`main.py`) and Modal (`app.py`)
+- Runtime launcher: Modal (`app.py`)
 - Media tooling: `ffmpeg`, `ffprobe`
 
 ## Project layout
 
 ```text
 .
-├── main.py                     # Local launcher (install/build/start)
 ├── app.py                      # Modal image + launch/run lifecycle
 ├── server/
 │   ├── src/index.js            # Fastify routes + WebSocket terminal
@@ -36,14 +35,6 @@ Self-hosted video library for local or Modal runtime.
 ```
 
 ## Quick start
-
-### Run locally
-
-```bash
-python main.py
-```
-
-Opens backend at `http://localhost:3000` (and serves built frontend from `client/dist`).
 
 ### Run frontend/backend separately (dev)
 
@@ -104,5 +95,4 @@ Full reference in source: `server/src/routes/`.
 ```bash
 cd server && bun run test
 ```
-
 

@@ -21,5 +21,4 @@ All UI changes must follow the app's existing design language:
 - **Dev frontend**: `cd client && bun run dev`
 - **Dev backend**: `cd server && bun run start`
 - **Build client**: `cd client && bun run build`
-- **Run locally**: `python main.py`
 - **Run on Modal**: `modal run app.py`
