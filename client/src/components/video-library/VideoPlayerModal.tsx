@@ -1,6 +1,6 @@
 import "./VideoPlayerModal.css";
 import { useId, useRef } from "react";
-import { IconCheck } from "@tabler/icons-react";
+import { IconCircleCheckFilled } from "@tabler/icons-react";
 import type { Video } from "../../types";
 import { useDialogFocusTrap } from "../../hooks/useDialogFocusTrap";
 import CustomVideoPlayer from "./CustomVideoPlayer";
@@ -36,7 +36,7 @@ export default function VideoPlayerModal({
           <span id={titleId}>{selectedVideo.title}</span>
           {selectedVideo.hasSprites && (
             <span className="sprite-badge">
-              <IconCheck size={14} />
+              <IconCircleCheckFilled size={14} />
               Sprite Available
             </span>
           )}

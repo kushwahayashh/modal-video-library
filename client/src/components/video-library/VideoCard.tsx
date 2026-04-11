@@ -21,15 +21,20 @@ export default function VideoCard({
   watchProgress,
 }: VideoCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
 
   const stablePlaceholderKey =
     `${video.addedAt || video.createdAt || ""}|${video.sizeBytes || 0}|${video.duration || ""}`;
   const fallbackPlaceholder = getStablePlaceholder(stablePlaceholderKey, placeholderImages);
-  const imgSrc = thumbnailOverrides[video.id] || video.thumbnail || fallbackPlaceholder;
+  
+  const preferredSrc = thumbnailOverrides[video.id] || video.thumbnail;
+  // If the preferred image (override) 404s or fails to load, gracefully fall back to the stable auto-generated one
+  const imgSrc = imageFailed && preferredSrc ? fallbackPlaceholder : (preferredSrc || fallbackPlaceholder);
 
   useEffect(() => {
     setImageLoaded(false);
-  }, [imgSrc]);
+    setImageFailed(false);
+  }, [preferredSrc, fallbackPlaceholder]);
 
   const handleContextMenu = (e: ReactMouseEvent) => {
     e.preventDefault();
@@ -47,6 +52,12 @@ export default function VideoCard({
             loading="lazy"
             className={`video-thumb-img ${imageLoaded ? "loaded" : ""}`}
             onLoad={() => setImageLoaded(true)}
+            onError={() => {
+              // If the preferred src fails, mark it so it swaps to fallback
+              if (!imageFailed && preferredSrc && fallbackPlaceholder) {
+                setImageFailed(true);
+              }
+            }}
           />
         )}
         {video.duration && <div className="video-duration">{video.duration}</div>}

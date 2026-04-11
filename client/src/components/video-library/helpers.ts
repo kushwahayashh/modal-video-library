@@ -1,10 +1,32 @@
 export function getStablePlaceholder(stableKey: string, placeholders: string[]): string | null {
   if (placeholders.length === 0) return null;
-  let hash = 0;
-  for (let i = 0; i < stableKey.length; i += 1) {
-    hash = (hash * 31 + stableKey.charCodeAt(i)) >>> 0;
+  
+  // Highest Random Weight (Rendezvous Hashing)
+  // Ensures adding/removing a placeholder only affects a minimal number of videos
+  // instead of scrambling the entire library.
+  let bestPlaceholder = placeholders[0];
+  let maxHash = -1;
+
+  for (let i = 0; i < placeholders.length; i++) {
+    const url = placeholders[i];
+    // Use filename to make the hash resilient to mount path changes
+    const filename = url.split("/").pop() || url;
+    const str = stableKey + "|" + filename;
+    
+    let hash = 0;
+    for (let j = 0; j < str.length; j++) {
+      hash = (Math.imul(31, hash) + str.charCodeAt(j)) | 0;
+    }
+    // force unsigned 32-bit integer for comparison
+    hash = hash >>> 0;
+    
+    if (hash > maxHash) {
+      maxHash = hash;
+      bestPlaceholder = url;
+    }
   }
-  return placeholders[hash % placeholders.length] || null;
+  
+  return bestPlaceholder || null;
 }
 
 export async function saveThumbnailToServer(videoId: string, imageUrl: string) {

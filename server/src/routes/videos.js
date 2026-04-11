@@ -84,6 +84,7 @@ export function registerVideoRoutes(app, deps) {
     updateWatchProgress,
     listPlaceholderImageUrls,
     touchActivity,
+    cancelJob,
   } = deps;
 
   app.get("/api/videos", async (request) => {
@@ -332,6 +333,10 @@ export function registerVideoRoutes(app, deps) {
           }
           return progressMap;
         });
+
+        if (deps.spriteJobs?.has(id)) {
+           deps.cancelJob(id);
+        }
       }
 
       return { success: true, id: newId, filename: newRelPath };
@@ -380,7 +385,11 @@ export function registerVideoRoutes(app, deps) {
         return progressMap;
       });
 
-      deps.spriteJobs.delete(id);
+      if (deps.cancelJob) {
+        deps.cancelJob(id);
+      } else if (deps.spriteJobs) {
+        deps.spriteJobs.delete(id);
+      }
 
       return { success: true };
     } catch (e) {

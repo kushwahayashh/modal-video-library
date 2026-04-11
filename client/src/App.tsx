@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { IconFolderOpen, IconSearch, IconSearchOff, IconX } from "@tabler/icons-react";
+import { IconSearch, IconSearchOff, IconCircleXFilled, IconFolderOpenFilled } from "@tabler/icons-react";
 import "./App.css";
 import type { Video } from "./types";
 import { useSpriteProgress, type SpriteProgressJob } from "./hooks/useSpriteProgress";
@@ -13,6 +13,7 @@ import VirtualizedVideoGrid from "./components/video-library/VirtualizedVideoGri
 import VideoPlayerModal from "./components/video-library/VideoPlayerModal";
 import VideoActionModal from "./components/video-library/VideoActionModal";
 import ProcessesModal from "./components/video-library/ProcessesModal";
+import ThumbnailBrowserModal from "./components/video-library/ThumbnailBrowserModal";
 
 function App() {
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
@@ -20,6 +21,8 @@ function App() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [processesModalOpen, setProcessesModalOpen] = useState(false);
+  const [thumbBrowserOpen, setThumbBrowserOpen] = useState(false);
+  const [thumbBrowserClosing, setThumbBrowserClosing] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [watchProgress, setWatchProgress] = useState<Record<string, { currentTime: number; duration: number }>>({});
   const closeTimerRef = useRef<number | null>(null);
@@ -38,6 +41,8 @@ function App() {
     fetchVideos,
     loadMoreVideos,
     updateThumbnailOverride,
+    addPlaceholderImages,
+    removePlaceholderImage,
   } = useVideoLibraryData({
     onThumbnailSaveError: (message) => toast.error(message),
     searchQuery: debouncedSearch,
@@ -179,7 +184,7 @@ function App() {
 
   const hasActiveSearch = debouncedSearch.length > 0;
   const isSearchPending = search.trim() !== debouncedSearch;
-  const hasOpenModal = !!selectedVideo || !!actionModal || processesModalOpen;
+  const hasOpenModal = !!selectedVideo || !!actionModal || processesModalOpen || thumbBrowserOpen;
 
   useEffect(() => {
     const { body, documentElement } = document;
@@ -228,7 +233,9 @@ function App() {
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (processesModalOpen) {
+        if (thumbBrowserOpen) {
+          setThumbBrowserClosing(true);
+        } else if (processesModalOpen) {
           setProcessesModalOpen(false);
         } else if (actionModal) {
           closeActionModal();
@@ -245,7 +252,7 @@ function App() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedVideo, closeModal, actionModal, processesModalOpen, hasOpenModal]);
+  }, [selectedVideo, closeModal, actionModal, processesModalOpen, thumbBrowserOpen, hasOpenModal]);
 
   return (
     <div className={`app${hasOpenModal ? " modal-open" : ""}`}>
@@ -256,7 +263,7 @@ function App() {
           </a>
 
           <div className="nav-search-wrapper">
-            <IconSearch size={18} className={`nav-search-icon${isSearchPending ? " searching" : ""}`} />
+            <IconSearch size={20} className={`nav-search-icon${isSearchPending ? " searching" : ""}`} stroke={2.5} />
             <input
               ref={searchInputRef}
               type="text"
@@ -272,7 +279,7 @@ function App() {
                 onClick={() => { setSearch(""); searchInputRef.current?.focus(); }}
                 aria-label="Clear search"
               >
-                <IconX size={16} />
+                <IconCircleXFilled size={18} />
               </button>
             )}
 
@@ -285,6 +292,7 @@ function App() {
                 <span className="nav-process-count">{activeSpriteJobs.length}</span>
               </button>
             )}
+            <button className="nav-btn" onClick={() => setThumbBrowserOpen(true)}>Thumbnails</button>
             <a href="/terminal" target="_blank" rel="noopener noreferrer" className="nav-btn nav-btn-terminal">Terminal</a>
           </div>
         </div>
@@ -325,7 +333,7 @@ function App() {
             </div>
           ) : videos.length === 0 ? (
             <div className="empty">
-              <IconFolderOpen className="empty-icon" aria-hidden="true" />
+              <IconFolderOpenFilled className="empty-icon" aria-hidden="true" />
               <h2>No videos yet</h2>
               <p>Upload or download videos to get started</p>
             </div>
@@ -384,12 +392,28 @@ function App() {
           toast.success("Thumbnail updated");
           closeActionModal();
         }}
+        onPlaceholderImagesAdded={addPlaceholderImages}
+        onPlaceholderImageDeleted={removePlaceholderImage}
       />
 
       <ProcessesModal
         open={processesModalOpen}
         jobs={activeSpriteJobs}
         onClose={() => setProcessesModalOpen(false)}
+      />
+
+      <ThumbnailBrowserModal
+        open={thumbBrowserOpen}
+        closing={thumbBrowserClosing}
+        placeholderImages={placeholderImages}
+        placeholdersLoading={placeholdersLoading}
+        onClose={() => setThumbBrowserClosing(true)}
+        onClosed={() => {
+          setThumbBrowserOpen(false);
+          setThumbBrowserClosing(false);
+        }}
+        onPlaceholderImagesAdded={addPlaceholderImages}
+        onPlaceholderImageDeleted={removePlaceholderImage}
       />
     </div>
   );

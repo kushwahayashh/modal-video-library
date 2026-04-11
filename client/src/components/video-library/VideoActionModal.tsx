@@ -2,7 +2,7 @@ import "./VideoActionModal.css";
 import { useId, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { Video } from "../../types";
 import { formatBytes, formatDate } from "../../utils";
-import ThumbnailPicker from "../ThumbnailPicker";
+import ThumbnailBrowserModal from "./ThumbnailBrowserModal";
 import { useDialogFocusTrap } from "../../hooks/useDialogFocusTrap";
 import type { ActionModalType, VideoProperties } from "./types";
 
@@ -25,6 +25,8 @@ interface VideoActionModalProps {
   placeholdersLoading: boolean;
   selectedThumbnail?: string;
   onThumbnailSelect: (image: string) => void;
+  onPlaceholderImagesAdded?: (newUrls: string[]) => void;
+  onPlaceholderImageDeleted?: (url: string) => void;
 }
 
 interface SummaryItem {
@@ -56,6 +58,8 @@ export default function VideoActionModal({
   placeholdersLoading,
   selectedThumbnail,
   onThumbnailSelect,
+  onPlaceholderImagesAdded,
+  onPlaceholderImageDeleted,
 }: VideoActionModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -72,6 +76,24 @@ export default function VideoActionModal({
 
   if ((!actionModal || !actionVideo) && !closing) return null;
   if (!actionVideo) return null;
+
+  // Thumbnail picker renders as a fullscreen overlay, not a centered modal
+  if (actionModal === "thumbnail") {
+    return (
+      <ThumbnailBrowserModal
+        open={true}
+        closing={closing}
+        placeholderImages={placeholderImages}
+        placeholdersLoading={placeholdersLoading}
+        selectedThumbnail={selectedThumbnail}
+        onSelect={onThumbnailSelect}
+        onClose={onClose}
+        onClosed={onClosed}
+        onPlaceholderImagesAdded={onPlaceholderImagesAdded}
+        onPlaceholderImageDeleted={onPlaceholderImageDeleted}
+      />
+    );
+  }
 
   const summaryItems: SummaryItem[] = [
     {
@@ -111,11 +133,9 @@ export default function VideoActionModal({
   const modalClassName = `action-modal ${
     actionModal === "rename"
       ? "rename-modal"
-      : actionModal === "thumbnail"
-        ? "thumbnail-modal"
-        : actionModal === "properties"
-          ? "properties-modal"
-          : ""
+      : actionModal === "properties"
+        ? "properties-modal"
+        : ""
   }`;
   const normalizedTitle = actionVideo.title.trim().toLowerCase();
   const normalizedFilename = actionVideo.filename.trim().toLowerCase();
@@ -258,20 +278,7 @@ export default function VideoActionModal({
           </>
         )}
 
-        {actionModal === "thumbnail" && (
-          <>
-            <div id={titleId} className="action-modal-title">{dialogTitle}</div>
-            <ThumbnailPicker
-              images={placeholderImages}
-              loading={placeholdersLoading}
-              selectedImage={selectedThumbnail}
-              onSelect={onThumbnailSelect}
-            />
-            <div className="action-modal-actions">
-              <button type="button" className="action-btn secondary" onClick={onClose}>Cancel</button>
-            </div>
-          </>
-        )}
+
       </div>
     </div>
   );

@@ -1,21 +1,36 @@
 import { useEffect, useState } from "react";
+import { IconTrashFilled } from "@tabler/icons-react";
 
 interface ThumbnailPickerProps {
   images: string[];
   loading: boolean;
   selectedImage?: string;
   onSelect: (imageUrl: string) => void;
+  onDelete?: (imageUrl: string) => void;
 }
 
 type ThumbnailStatus = "loaded" | "error";
 
-function ThumbnailPicker({ images, loading, selectedImage, onSelect }: ThumbnailPickerProps) {
+function ThumbnailPicker({ images, loading, selectedImage, onSelect, onDelete }: ThumbnailPickerProps) {
   const [thumbnailStatusByImage, setThumbnailStatusByImage] = useState<
     Record<string, ThumbnailStatus>
   >({});
 
+  // Only reset status for images that were removed, keep status for existing ones
   useEffect(() => {
-    setThumbnailStatusByImage({});
+    setThumbnailStatusByImage((prev) => {
+      const currentSet = new Set(images);
+      const next: Record<string, ThumbnailStatus> = {};
+      for (const img of images) {
+        if (prev[img]) next[img] = prev[img];
+      }
+      // Only update if something actually changed
+      const prevKeys = Object.keys(prev);
+      if (prevKeys.length === Object.keys(next).length && prevKeys.every((k) => currentSet.has(k))) {
+        return prev;
+      }
+      return next;
+    });
   }, [images]);
 
   return (
@@ -34,36 +49,49 @@ function ThumbnailPicker({ images, loading, selectedImage, onSelect }: Thumbnail
         const failed = status === "error";
 
         return (
-          <button
-            key={img}
-            className={`thumbnail-picker-item ${selectedImage === img ? "active" : ""} ${loaded ? "loaded" : ""} ${failed ? "error" : ""}`}
-            disabled={failed}
-            onClick={() => onSelect(img)}
-          >
-            {!loaded && !failed && <div className="thumbnail-picker-skeleton" />}
-            {!failed && (
-              <img
-                src={img}
-                alt=""
-                loading="lazy"
-                onLoad={() => {
-                  setThumbnailStatusByImage((prev) => {
-                    if (prev[img] === "loaded") return prev;
-                    return { ...prev, [img]: "loaded" };
-                  });
+          <div key={img} className="thumbnail-picker-wrapper">
+            <button
+              className={`thumbnail-picker-item ${selectedImage === img ? "active" : ""} ${loaded ? "loaded" : ""} ${failed ? "error" : ""}`}
+              disabled={failed}
+              onClick={() => onSelect(img)}
+            >
+              {!loaded && !failed && <div className="thumbnail-picker-skeleton" />}
+              {!failed && (
+                <img
+                  src={img}
+                  alt=""
+                  loading="lazy"
+                  onLoad={() => {
+                    setThumbnailStatusByImage((prev) => {
+                      if (prev[img] === "loaded") return prev;
+                      return { ...prev, [img]: "loaded" };
+                    });
+                  }}
+                  onError={() => {
+                    setThumbnailStatusByImage((prev) => {
+                      if (prev[img] === "error") return prev;
+                      return { ...prev, [img]: "error" };
+                    });
+                  }}
+                />
+              )}
+              {failed && (
+                <span className="thumbnail-picker-fallback">Unavailable</span>
+              )}
+            </button>
+            {onDelete && (
+              <button
+                className="thumbnail-picker-delete"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(img);
                 }}
-                onError={() => {
-                  setThumbnailStatusByImage((prev) => {
-                    if (prev[img] === "error") return prev;
-                    return { ...prev, [img]: "error" };
-                  });
-                }}
-              />
+                title="Delete thumbnail"
+              >
+                <IconTrashFilled size={28} />
+              </button>
             )}
-            {failed && (
-              <span className="thumbnail-picker-fallback">Unavailable</span>
-            )}
-          </button>
+          </div>
         );
       })}
     </div>

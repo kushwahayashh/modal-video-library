@@ -20,7 +20,8 @@ export function createSpriteService({ spritesDir, fileExists }) {
   async function runSpriteGeneration(id, filename, filePath) {
     const ext = path.extname(filename);
     const title = path.basename(filename, ext);
-    const job = { videoId: id, title, status: "extracting", current: 0, total: 0, error: null };
+    const abortController = new AbortController();
+    const job = { videoId: id, title, status: "extracting", current: 0, total: 0, error: null, abortController };
     spriteJobs.set(id, job);
     const startTime = Date.now();
 
@@ -77,10 +78,15 @@ export function createSpriteService({ spritesDir, fileExists }) {
           "-vf", `fps=1/${interval},scale=480:270`,
           "-q:v", "2",
           path.join(segment.segDir, "frame_%04d.jpg"),
-        ])
+        ], { signal: abortController.signal })
       );
 
       progressInterval = setInterval(async () => {
+        if (!spriteJobs.has(id)) {
+          clearInterval(progressInterval);
+          abortController.abort();
+          return;
+        }
         try {
           let count = 0;
           for (const segment of segments) {
@@ -129,12 +135,14 @@ export function createSpriteService({ spritesDir, fileExists }) {
       const cols = 10;
       const rows = Math.ceil(frameCount / cols);
 
+      if (!spriteJobs.has(id)) throw new Error("Job cancelled");
+
       await execFileAsync("ffmpeg", [
         "-i", path.join(tempDir, "frame_%04d.jpg"),
         "-filter_complex", `tile=${cols}x${rows}:padding=0`,
         "-q:v", "2",
         path.join(spriteDir, "sprite.jpg"),
-      ]);
+      ], { signal: abortController.signal });
 
       let vtt = "WEBVTT\n\n";
       for (let i = 1; i <= frameCount; i++) {
@@ -164,16 +172,29 @@ export function createSpriteService({ spritesDir, fileExists }) {
         console.error(`  sprites: "${title}" — stdout:\n${e.stdout.toString()}`);
       }
       job.status = "error";
-      job.error = "Failed to generate sprites";
+      job.error = e.name === "AbortError" ? "Job cancelled" : "Failed to generate sprites";
+      if (e.name === "AbortError") {
+         try { await fsp.rm(path.join(spritesDir, id), { recursive: true, force: true }); } catch {}
+      }
     } finally {
       if (progressInterval) clearInterval(progressInterval);
-      setTimeout(() => spriteJobs.delete(id), 10000);
+      if (job.status !== "error" || job.error !== "Job cancelled") {
+        setTimeout(() => spriteJobs.delete(id), 10000);
+      }
     }
+  }
+
+  function cancelJob(id) {
+    const job = spriteJobs.get(id);
+    if (job && job.abortController) {
+      job.abortController.abort();
+    }
+    spriteJobs.delete(id);
   }
 
   function isJobRunning(job) {
     return !!job && (job.status === "extracting" || job.status === "tiling");
   }
 
-  return { spriteJobs, runSpriteGeneration, isJobRunning };
+  return { spriteJobs, runSpriteGeneration, isJobRunning, cancelJob };
 }

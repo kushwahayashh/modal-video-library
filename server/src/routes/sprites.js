@@ -30,6 +30,9 @@ export function registerSpriteRoutes(app, deps) {
 
   app.get("/api/sprites/:id/image", async (request, reply) => {
     const { id } = request.params;
+    if (!safeResolve(SPRITES_DIR, id)) {
+      return reply.status(400).send({ error: "Invalid sprite ID" });
+    }
     const spritePath = path.join(SPRITES_DIR, id, "sprite.jpg");
 
     if (!(await fileExists(spritePath))) {
@@ -41,6 +44,9 @@ export function registerSpriteRoutes(app, deps) {
 
   app.get("/api/sprites/:id/vtt", async (request, reply) => {
     const { id } = request.params;
+    if (!safeResolve(SPRITES_DIR, id)) {
+      return reply.status(400).send({ error: "Invalid sprite ID" });
+    }
     const vttPath = path.join(SPRITES_DIR, id, "sprite.vtt");
 
     if (!(await fileExists(vttPath))) {
@@ -52,6 +58,9 @@ export function registerSpriteRoutes(app, deps) {
 
   app.get("/api/sprites/:id/status", async (request) => {
     const { id } = request.params;
+    if (!safeResolve(SPRITES_DIR, id)) {
+      return { exists: false };
+    }
     const spriteDir = path.join(SPRITES_DIR, id);
     const exists =
       (await fileExists(path.join(spriteDir, "sprite.jpg"))) &&

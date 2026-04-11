@@ -73,7 +73,6 @@ image = (
     # Add source code (changes here won't re-run npm install)
     .add_local_dir("server/src", remote_path="/app/server/src")
     .add_local_dir("client/src", remote_path="/app/client/src")
-    .add_local_dir("images", remote_path="/app/images")
 )
 
 app = modal.App(APP_NAME, image=image)
@@ -146,7 +145,7 @@ def _tunnel_redirect_page(tunnel_url: str, poll_url: str):
 @app.function(
     timeout=86400,
     volumes={"/data": volume},
-    env={"HOME": "/data/.home"},
+    env={"HOME": "/data/.home", "PI_OFFLINE": "1"},
     secrets=[modal.Secret.from_name("gemini-key")],
 )
 def run():
@@ -167,7 +166,7 @@ def run():
         os.makedirs("/data/.home", exist_ok=True)
         os.makedirs("/data/videos", exist_ok=True)
         os.makedirs("/data/thumbnails", exist_ok=True)
-        os.makedirs("/data/db", exist_ok=True)
+
 
     def wait_for_health(url, timeout=30, interval=0.5):
         deadline = time.time() + timeout

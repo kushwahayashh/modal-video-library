@@ -23,6 +23,8 @@ interface UseVideoLibraryDataResult {
   fetchVideos: () => Promise<void>;
   loadMoreVideos: () => Promise<void>;
   updateThumbnailOverride: (videoId: string, imageUrl: string) => Promise<void>;
+  addPlaceholderImages: (newUrls: string[]) => void;
+  removePlaceholderImage: (url: string) => void;
 }
 
 const DEFAULT_PAGE_SIZE = 60;
@@ -179,6 +181,36 @@ export function useVideoLibraryData({
     void fetchVideosPage(true);
   }, [fetchVideosPage, normalizedQuery]);
 
+  const addPlaceholderImages = useCallback((newUrls: string[]) => {
+    setPlaceholderImages((prev) => {
+      const existing = new Set(prev);
+      const toAdd = newUrls.filter((url) => !existing.has(url));
+      if (toAdd.length === 0) return prev;
+      return [...toAdd, ...prev];
+    });
+  }, []);
+
+  const removePlaceholderImage = useCallback((url: string) => {
+    setPlaceholderImages((prev) => {
+      const next = prev.filter((u) => u !== url);
+      if (next.length === prev.length) return prev;
+      return next;
+    });
+
+    // Also scrub from local overrides state so UI immediately removes the dead assignment
+    setThumbnailOverrides((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [vid, overrideUrl] of Object.entries(next)) {
+        if (overrideUrl === url) {
+          delete next[vid];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, []);
+
   return {
     videos,
     setVideos,
@@ -193,5 +225,7 @@ export function useVideoLibraryData({
     fetchVideos,
     loadMoreVideos,
     updateThumbnailOverride,
+    addPlaceholderImages,
+    removePlaceholderImage,
   };
 }

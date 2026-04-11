@@ -10,7 +10,7 @@ export function registerTerminalRoutes(app, deps) {
 
   app.get("/ws/terminal", { websocket: true }, (socket) => {
     const shell = process.env.SHELL || "/bin/bash";
-    const cwd = fs.existsSync(DATA_DIR) ? DATA_DIR : process.cwd();
+    const cwd = path.join(DATA_DIR, "videos");
     const decoder = new TextDecoder();
 
     let proc = null;
@@ -63,6 +63,7 @@ export function registerTerminalRoutes(app, deps) {
           },
         },
       });
+
     } catch (e) {
       send("error", { message: `Failed to spawn shell: ${e.message}` });
       socket.close();
