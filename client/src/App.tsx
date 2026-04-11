@@ -14,6 +14,7 @@ import VideoPlayerModal from "./components/video-library/VideoPlayerModal";
 import VideoActionModal from "./components/video-library/VideoActionModal";
 import ProcessesModal from "./components/video-library/ProcessesModal";
 import ThumbnailBrowserModal from "./components/video-library/ThumbnailBrowserModal";
+import FileManager from "./FileManager";
 
 function App() {
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
@@ -23,6 +24,7 @@ function App() {
   const [processesModalOpen, setProcessesModalOpen] = useState(false);
   const [thumbBrowserOpen, setThumbBrowserOpen] = useState(false);
   const [thumbBrowserClosing, setThumbBrowserClosing] = useState(false);
+  const [fileManagerOpen, setFileManagerOpen] = useState(() => window.location.pathname === "/files");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [watchProgress, setWatchProgress] = useState<Record<string, { currentTime: number; duration: number }>>({});
   const closeTimerRef = useRef<number | null>(null);
@@ -78,6 +80,22 @@ function App() {
     }, 180);
     return () => window.clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    document.title = fileManagerOpen ? "Files" : "Video Library";
+    const targetPath = fileManagerOpen ? "/files" : "/";
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState({ fileManager: fileManagerOpen }, "", targetPath);
+    }
+  }, [fileManagerOpen]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      setFileManagerOpen(window.location.pathname === "/files");
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   const fetchWatchProgress = useCallback(() => {
     fetch("/api/watch-progress")
@@ -293,72 +311,77 @@ function App() {
               </button>
             )}
             <button className="nav-btn" onClick={() => setThumbBrowserOpen(true)}>Thumbnails</button>
+            <a href={fileManagerOpen ? "/" : "/files"} className="nav-btn nav-btn-terminal" onClick={(e) => { if (!e.ctrlKey && !e.metaKey && !e.shiftKey) { e.preventDefault(); setFileManagerOpen(!fileManagerOpen); } }}>{fileManagerOpen ? "Videos" : "Files"}</a>
             <a href="/terminal" target="_blank" rel="noopener noreferrer" className="nav-btn nav-btn-terminal">Terminal</a>
           </div>
         </div>
       </nav>
 
-      <main className="main">
-        <div className="container">
-          {videosError && videos.length > 0 && (
-            <div className="status-banner" role="status" aria-live="polite">
-              <span className="status-banner-text">
-                Couldn&apos;t refresh videos. Showing last loaded list.
-              </span>
-              <button type="button" className="status-banner-btn" onClick={() => void fetchVideos()}>
-                Retry
-              </button>
-            </div>
-          )}
+      {fileManagerOpen ? (
+        <FileManager embedded onBack={() => setFileManagerOpen(false)} />
+      ) : (
+        <main className="main">
+          <div className="container">
+            {videosError && videos.length > 0 && (
+              <div className="status-banner" role="status" aria-live="polite">
+                <span className="status-banner-text">
+                  Couldn&apos;t refresh videos. Showing last loaded list.
+                </span>
+                <button type="button" className="status-banner-btn" onClick={() => void fetchVideos()}>
+                  Retry
+                </button>
+              </div>
+            )}
 
-          {loading ? (
-            <div className="video-grid">
-              {[...Array(18)].map((_, i) => (
-                <div key={i} className="skeleton-card" />
-              ))}
-            </div>
-          ) : videosError && videos.length === 0 ? (
-            <div className="empty">
-              <h2>Couldn&apos;t load videos</h2>
-              <p>{videosError}</p>
-              <button type="button" className="empty-retry-btn" onClick={() => void fetchVideos()}>
-                Retry
-              </button>
-            </div>
-          ) : hasActiveSearch && videos.length === 0 ? (
-            <div className="empty">
-              <IconSearchOff className="empty-icon" aria-hidden="true" />
-              <h2>No results</h2>
-              <p>No videos match your search</p>
-            </div>
-          ) : videos.length === 0 ? (
-            <div className="empty">
-              <IconFolderOpenFilled className="empty-icon" aria-hidden="true" />
-              <h2>No videos yet</h2>
-              <p>Upload or download videos to get started</p>
-            </div>
-          ) : (
-            <>
-              <VirtualizedVideoGrid
-                videos={videos}
-                onVideoClick={openModal}
-                onVideoContextMenu={openContextMenu}
-                placeholderImages={placeholderImages}
-                thumbnailOverrides={thumbnailOverrides}
-                watchProgress={watchProgress}
-                hasMore={hasMore}
-                loadingMore={loadingMore}
-                onLoadMore={() => {
-                  void loadMoreVideos();
-                }}
-              />
-              {loadingMore && (
-                <div className="video-grid-load-more">Loading more videos...</div>
-              )}
-            </>
-          )}
-        </div>
-      </main>
+            {loading ? (
+              <div className="video-grid">
+                {[...Array(18)].map((_, i) => (
+                  <div key={i} className="skeleton-card" />
+                ))}
+              </div>
+            ) : videosError && videos.length === 0 ? (
+              <div className="empty">
+                <h2>Couldn&apos;t load videos</h2>
+                <p>{videosError}</p>
+                <button type="button" className="empty-retry-btn" onClick={() => void fetchVideos()}>
+                  Retry
+                </button>
+              </div>
+            ) : hasActiveSearch && videos.length === 0 ? (
+              <div className="empty">
+                <IconSearchOff className="empty-icon" aria-hidden="true" />
+                <h2>No results</h2>
+                <p>No videos match your search</p>
+              </div>
+            ) : videos.length === 0 ? (
+              <div className="empty">
+                <IconFolderOpenFilled className="empty-icon" aria-hidden="true" />
+                <h2>No videos yet</h2>
+                <p>Upload or download videos to get started</p>
+              </div>
+            ) : (
+              <>
+                <VirtualizedVideoGrid
+                  videos={videos}
+                  onVideoClick={openModal}
+                  onVideoContextMenu={openContextMenu}
+                  placeholderImages={placeholderImages}
+                  thumbnailOverrides={thumbnailOverrides}
+                  watchProgress={watchProgress}
+                  hasMore={hasMore}
+                  loadingMore={loadingMore}
+                  onLoadMore={() => {
+                    void loadMoreVideos();
+                  }}
+                />
+                {loadingMore && (
+                  <div className="video-grid-load-more">Loading more videos...</div>
+                )}
+              </>
+            )}
+          </div>
+        </main>
+      )}
 
       <ContextMenu state={contextMenu} onClose={closeContextMenu} onAction={handleContextAction} />
 

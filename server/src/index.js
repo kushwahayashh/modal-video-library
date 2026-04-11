@@ -14,6 +14,7 @@ import { fileExists } from "./lib/files.js";
 import { registerVideoRoutes } from "./routes/videos.js";
 import { registerSpriteRoutes } from "./routes/sprites.js";
 import { registerTerminalRoutes } from "./routes/terminal.js";
+import { registerFileRoutes } from "./routes/files.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = Fastify({ logger: false, routerOptions: { maxParamLength: 500 } });
@@ -284,6 +285,8 @@ registerTerminalRoutes(app, {
   touchActivity,
   terminalState,
 });
+
+registerFileRoutes(app, { DATA_DIR });
 
 app.setNotFoundHandler(async (request, reply) => {
   if (request.url.startsWith("/api/") || request.url.startsWith("/ws/")) {

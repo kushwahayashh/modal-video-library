@@ -213,7 +213,7 @@ export default function ContextMenu({ state, onClose, onAction }: ContextMenuPro
     >
       {menuItems.map((item, index) => (
         <div key={item.id}>
-          {item.dividerBefore ? <div className="context-menu-divider" role="separator" /> : null}
+          {index > 0 ? <div className="context-menu-divider" role="separator" /> : null}
           <button
             ref={(el) => {
               itemRefs.current[index] = el;

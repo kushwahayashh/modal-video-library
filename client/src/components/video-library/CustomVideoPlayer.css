@@ -348,41 +348,58 @@
 }
 
 .vp-speed-menu {
-  animation: speedMenuIn 0.16s ease-out;
-}
-
-.vp-speed-menu {
   position: absolute;
   bottom: 100%;
   right: 0;
   margin-bottom: 6px;
-  background: var(--bg-card);
-  border: none;
-  border-radius: 4px;
+  min-width: 160px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
   padding: 4px 0;
-  min-width: 72px;
   z-index: 20;
+  transform-origin: bottom right;
+  animation: speedMenuIn 0.14s ease-out;
+  will-change: transform, opacity;
 }
 
 @keyframes speedMenuIn {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(2px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: scale(1);
   }
+}
+
+.vp-speed-header {
+  padding: 5px 18px 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+
+.vp-speed-divider {
+  height: 1px;
+  margin: 3px 10px;
+  background: var(--border);
 }
 
 .vp-speed-option {
   display: block;
-  width: 100%;
-  padding: 6px 14px;
-  background: none;
+  width: calc(100% - 20px);
+  margin: 0 10px;
+  padding: 5px 8px;
+  background: transparent;
   border: none;
-  color: var(--text-secondary);
-  font-size: 0.9375rem;
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 0.875rem;
   text-align: left;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
@@ -391,12 +408,12 @@
 .vp-speed-option:focus,
 .vp-speed-option:focus-visible {
   outline: none;
-  box-shadow: none;
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
 }
 
 .vp-speed-option:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
+  background: var(--bg-card-hover);
 }
 
 .vp-speed-option.active {

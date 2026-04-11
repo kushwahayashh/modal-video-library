@@ -92,14 +92,27 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
 
   useEffect(() => {
     if (!showSpeedMenu) return;
-    const handleClick = (e: MouseEvent) => {
+    const handlePointerDown = (e: PointerEvent) => {
       if (speedMenuRef.current && !speedMenuRef.current.contains(e.target as Node)) {
         setShowSpeedMenu(false);
       }
     };
-    document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    return () => document.removeEventListener("pointerdown", handlePointerDown, true);
   }, [showSpeedMenu]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "a" || e.key === "A") {
+        e.preventDefault();
+        setFillToEdge((prev) => !prev);
+      }
+    };
+    container.addEventListener("keydown", handleKeyDown);
+    return () => container.removeEventListener("keydown", handleKeyDown);
+  }, [containerRef]);
 
   useEffect(() => {
     if (!spriteImageUrl) {
@@ -449,17 +462,21 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
               </button>
               {showSpeedMenu && (
                 <div className="vp-speed-menu">
-                  {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((rate) => (
-                    <button
-                      key={rate}
-                      className={`vp-speed-option ${rate === playbackRate ? "active" : ""}`}
-                      onClick={() => {
-                        setPlaybackRate(rate);
-                        setShowSpeedMenu(false);
-                      }}
-                    >
-                      {rate}x
-                    </button>
+                  <span className="vp-speed-header">Speed</span>
+                  <div className="vp-speed-divider" role="separator" />
+                  {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map((rate, i) => (
+                    <div key={rate}>
+                      {i > 0 && <div className="vp-speed-divider" role="separator" />}
+                      <button
+                        className={`vp-speed-option ${rate === playbackRate ? "active" : ""}`}
+                        onClick={() => {
+                          setPlaybackRate(rate);
+                          setShowSpeedMenu(false);
+                        }}
+                      >
+                        {rate}x
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
