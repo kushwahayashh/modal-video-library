@@ -15,7 +15,7 @@ import {
   IconTrashFilled,
 } from "@tabler/icons-react";
 import "./FileManager.css";
-import "./components/video-library/ContextMenu.css";
+import "../video-library/ContextMenu.css";
 
 type FileItem = {
   name: string;

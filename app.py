@@ -15,6 +15,7 @@ IDLE_TIMEOUT_SECONDS = 2 * 60 * 60
 IDLE_POLL_INTERVAL_SECONDS = 60
 RUN_HEARTBEAT_TTL_SECONDS = 15
 START_LOCK_TTL_SECONDS = 20 * 60
+START_LOCK_GRACE_SECONDS = 60
 
 
 image = (
@@ -427,6 +428,16 @@ def launch(fmt: str = ""):
         cf_url_store.pop("launching", None)
 
     launch_ts = state.get("launching")
+    # If the spawned run is not alive AND the lock is older than the grace
+    # period, assume the previous spawn died before heartbeating and clear it.
+    if (
+        isinstance(launch_ts, (int, float))
+        and (now_ts - launch_ts) >= START_LOCK_GRACE_SECONDS
+        and not _is_run_alive(state, now_ts)
+    ):
+        cf_url_store.pop("launching", None)
+        launch_ts = None
+
     launch_lock_active = (
         isinstance(launch_ts, (int, float))
         and (now_ts - launch_ts) < START_LOCK_TTL_SECONDS

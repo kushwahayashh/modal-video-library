@@ -438,9 +438,14 @@ export function registerVideoRoutes(app, deps) {
     const contentType = VIDEO_MIME_TYPES[ext] || "video/mp4";
     const isDownload = request.query.download !== undefined;
 
+    const baseName = path.basename(filename);
+    const asciiFallback = baseName.replace(/[^\x20-\x7E]+/g, "_").replace(/"/g, "'");
+    const dispositionType = isDownload ? "attachment" : "inline";
+    const contentDisposition = `${dispositionType}; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(baseName)}`;
+
     if (isDownload) {
       reply.headers({
-        "Content-Disposition": `attachment; filename="${encodeURIComponent(filename)}"`,
+        "Content-Disposition": contentDisposition,
         "Content-Length": stats.size,
         "Content-Type": "application/octet-stream",
       });
@@ -465,6 +470,7 @@ export function registerVideoRoutes(app, deps) {
         "Accept-Ranges": "bytes",
         "Content-Length": chunkSize,
         "Content-Type": contentType,
+        "Content-Disposition": contentDisposition,
       });
 
       return fs.createReadStream(filePath, { start, end });
@@ -474,6 +480,7 @@ export function registerVideoRoutes(app, deps) {
       "Content-Length": stats.size,
       "Content-Type": contentType,
       "Accept-Ranges": "bytes",
+      "Content-Disposition": contentDisposition,
     });
 
     return fs.createReadStream(filePath);

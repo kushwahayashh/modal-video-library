@@ -14,7 +14,7 @@ import VideoPlayerModal from "./components/video-library/VideoPlayerModal";
 import VideoActionModal from "./components/video-library/VideoActionModal";
 import ProcessesModal from "./components/video-library/ProcessesModal";
 import ThumbnailBrowserModal from "./components/video-library/ThumbnailBrowserModal";
-import FileManager from "./FileManager";
+import FileManager from "./components/file-manager/FileManager";
 
 function App() {
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
