@@ -25,7 +25,7 @@ export function registerSpriteRoutes(app, deps) {
   });
 
   app.get("/api/sprites/progress", async () => {
-    return { jobs: Array.from(spriteJobs.values(), (job) => ({ ...job })) };
+    return { jobs: Array.from(spriteJobs.values(), (job) => ({ ...(job as any) })) };
   });
 
   app.get("/api/sprites/:id/image", async (request, reply) => {

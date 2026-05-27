@@ -121,7 +121,7 @@ export async function getVideoMetadata(filePath) {
     const videoStream = streams.find((stream) => stream.codec_type === "video");
     const audioStream = streams.find((stream) => stream.codec_type === "audio");
 
-    const meta = {};
+    let meta: any = {};
 
     if (videoStream) {
       meta.resolution = `${videoStream.width}x${videoStream.height}`;

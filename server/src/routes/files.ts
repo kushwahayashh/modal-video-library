@@ -262,7 +262,7 @@ export function registerFileRoutes(app, { DATA_DIR }) {
     const isDir = stat.isDirectory();
     const ext = isDir ? "" : path.extname(fullPath).toLowerCase();
 
-    const info = {
+    const info: any = {
       name: path.basename(fullPath),
       path: relativeDisplay(ROOT, fullPath),
       isDirectory: isDir,

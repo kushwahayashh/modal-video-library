@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { createVideoAddedMapStore } from "../src/lib/video-added-map.js";
+import { createJsonMapStore } from "../src/lib/json-map-store.js";
 
 test("video-added-map store serializes concurrent updates", async () => {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "video-added-map-store-"));
   try {
-    const { updateVideoAddedMap, readVideoAddedMap } = createVideoAddedMapStore(dataDir);
+    const { update: updateVideoAddedMap, read: readVideoAddedMap } = createJsonMapStore(dataDir, "video-added-map.json");
 
     await Promise.all([
       updateVideoAddedMap((map) => ({ ...map, a: "2026-02-01T10:00:00.000Z" })),

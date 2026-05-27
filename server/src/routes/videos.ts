@@ -187,7 +187,7 @@ export function registerVideoRoutes(app, deps) {
         }
       }
 
-      videos.sort((a, b) => new Date(b.addedAt) - new Date(a.addedAt));
+      videos.sort((a, b) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime());
 
       let filtered = videos;
       if (queryText) {

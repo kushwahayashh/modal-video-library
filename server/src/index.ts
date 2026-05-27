@@ -172,7 +172,7 @@ app.post("/api/placeholder-images/upload", async (request, reply) => {
 });
 
 app.delete("/api/placeholder-images/:filename", async (request, reply) => {
-  const { filename } = request.params;
+  const { filename } = request.params as any;
   if (!filename || filename.includes("/") || filename.includes("\\") || filename.startsWith(".")) {
     return reply.status(400).send({ error: "Invalid filename" });
   }
@@ -206,7 +206,7 @@ app.delete("/api/placeholder-images/:filename", async (request, reply) => {
 app.get("/api/thumbnail-map", async () => readThumbMap());
 
 app.post("/api/thumbnail-map", async (request, reply) => {
-  const { videoId, imageUrl } = request.body || {};
+  const { videoId, imageUrl } = (request.body as any) || {};
 
   if (
     typeof videoId !== "string" ||
@@ -225,7 +225,7 @@ app.post("/api/thumbnail-map", async (request, reply) => {
 });
 
 app.post("/api/cf-url", async (request, reply) => {
-  const { url } = request.body || {};
+  const { url } = (request.body as any) || {};
   if (!url || !url.includes("trycloudflare.com")) {
     return reply.status(400).send({ error: "Invalid Cloudflare URL" });
   }
@@ -238,7 +238,7 @@ app.get("/api/cf-url", async (request, reply) => {
     return reply.status(404).send({ error: "Cloudflare URL not set" });
   }
 
-  if (request.query.redirect === "true") {
+  if ((request.query as any).redirect === "true") {
     return reply.redirect(cloudflareUrl);
   }
 
