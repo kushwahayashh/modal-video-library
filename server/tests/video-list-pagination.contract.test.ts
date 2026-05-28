@@ -2,7 +2,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 
 const originalDataDir = process.env.DATA_DIR;
 const originalAutoListen = process.env.NO_AUTO_LISTEN;
@@ -33,19 +33,13 @@ test("video list supports offset/limit pagination and text filtering", async () 
   for (const file of files) {
     await writeFile(path.join(videosDir, file), `bytes-${file}`);
   }
+  await utimes(path.join(videosDir, "first.mp4"), new Date("2026-02-01T00:00:00.000Z"), new Date("2026-02-01T00:00:00.000Z"));
+  await utimes(path.join(videosDir, "second.mp4"), new Date("2026-02-02T00:00:00.000Z"), new Date("2026-02-02T00:00:00.000Z"));
+  await utimes(path.join(videosDir, "third.mp4"), new Date("2026-02-03T00:00:00.000Z"), new Date("2026-02-03T00:00:00.000Z"));
 
   const firstId = Buffer.from("first.mp4").toString("base64url");
   const secondId = Buffer.from("second.mp4").toString("base64url");
   const thirdId = Buffer.from("third.mp4").toString("base64url");
-
-  await writeFile(
-    path.join(dataDir, "video-added-map.json"),
-    JSON.stringify({
-      [firstId]: "2026-02-01T00:00:00.000Z",
-      [secondId]: "2026-02-02T00:00:00.000Z",
-      [thirdId]: "2026-02-03T00:00:00.000Z",
-    })
-  );
 
   const firstPageRes = await app.inject({
     method: "GET",

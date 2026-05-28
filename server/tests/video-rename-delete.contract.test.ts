@@ -57,14 +57,17 @@ test("video rename moves thumbnail-map key and sprite metadata", async () => {
     `WEBVTT\n\n1\n00:00:00.000 --> 00:00:01.000\n/api/sprites/${oldId}/image#xywh=0,0,480,270\n`
   );
 
-  await writeFile(
-    path.join(dataDir, "thumbnail-map.json"),
-    JSON.stringify({ [oldId]: "/api/placeholder-images/alpha.jpeg" })
-  );
-  await writeFile(
-    path.join(dataDir, "video-added-map.json"),
-    JSON.stringify({ [oldId]: "2026-02-01T10:00:00.000Z" })
-  );
+  const scanRes = await app.inject({ method: "GET", url: "/api/videos" });
+  assert.equal(scanRes.statusCode, 200);
+  const initialVideo = (scanRes.json().videos || []).find((video) => video.id === oldId);
+  assert.ok(initialVideo, "expected old video to be indexed before rename");
+
+  const thumbWriteRes = await app.inject({
+    method: "POST",
+    url: "/api/thumbnail-map",
+    payload: { videoId: oldId, imageUrl: "/api/placeholder-images/alpha.jpeg" },
+  });
+  assert.equal(thumbWriteRes.statusCode, 200);
 
   const renameRes = await app.inject({
     method: "POST",
@@ -86,13 +89,16 @@ test("video rename moves thumbnail-map key and sprite metadata", async () => {
   assert.equal(rewrittenVtt.includes(`/api/sprites/${newId}/image`), true);
   assert.equal(rewrittenVtt.includes(`/api/sprites/${oldId}/image`), false);
 
-  const thumbMap = JSON.parse(await readFile(path.join(dataDir, "thumbnail-map.json"), "utf-8"));
+  const thumbMapRes = await app.inject({ method: "GET", url: "/api/thumbnail-map" });
+  assert.equal(thumbMapRes.statusCode, 200);
+  const thumbMap = thumbMapRes.json();
   assert.equal(thumbMap[oldId], undefined);
   assert.equal(thumbMap[newId], "/api/placeholder-images/alpha.jpeg");
 
-  const addedMap = JSON.parse(await readFile(path.join(dataDir, "video-added-map.json"), "utf-8"));
-  assert.equal(addedMap[oldId], undefined);
-  assert.equal(addedMap[newId], "2026-02-01T10:00:00.000Z");
+  const listRes = await app.inject({ method: "GET", url: "/api/videos" });
+  assert.equal(listRes.statusCode, 200);
+  const renamedVideo = (listRes.json().videos || []).find((video) => video.id === newId);
+  assert.equal(renamedVideo?.addedAt, initialVideo.addedAt);
 });
 
 test("video delete removes thumbnail-map entry and sprite directory", async () => {
@@ -111,15 +117,14 @@ test("video delete removes thumbnail-map entry and sprite directory", async () =
   await writeFile(path.join(spriteDir, "sprite.jpg"), "jpeg-bytes");
   await writeFile(path.join(spriteDir, "sprite.vtt"), "WEBVTT");
 
-  let currentThumbMap = {};
-  try {
-    currentThumbMap = JSON.parse(await readFile(path.join(dataDir, "thumbnail-map.json"), "utf-8"));
-  } catch {
-    currentThumbMap = {};
-  }
-  currentThumbMap[id] = "/api/placeholder-images/gamma.jpeg";
-  await writeFile(path.join(dataDir, "thumbnail-map.json"), JSON.stringify(currentThumbMap));
-  await writeFile(path.join(dataDir, "video-added-map.json"), JSON.stringify({ [id]: "2026-02-01T10:00:00.000Z" }));
+  const scanRes = await app.inject({ method: "GET", url: "/api/videos" });
+  assert.equal(scanRes.statusCode, 200);
+  const thumbWriteRes = await app.inject({
+    method: "POST",
+    url: "/api/thumbnail-map",
+    payload: { videoId: id, imageUrl: "/api/placeholder-images/gamma.jpeg" },
+  });
+  assert.equal(thumbWriteRes.statusCode, 200);
 
   const deleteRes = await app.inject({
     method: "DELETE",
@@ -131,9 +136,12 @@ test("video delete removes thumbnail-map entry and sprite directory", async () =
   assert.equal(await exists(videoPath), false);
   assert.equal(await exists(spriteDir), false);
 
-  const thumbMapAfterDelete = JSON.parse(await readFile(path.join(dataDir, "thumbnail-map.json"), "utf-8"));
+  const thumbMapAfterDeleteRes = await app.inject({ method: "GET", url: "/api/thumbnail-map" });
+  assert.equal(thumbMapAfterDeleteRes.statusCode, 200);
+  const thumbMapAfterDelete = thumbMapAfterDeleteRes.json();
   assert.equal(thumbMapAfterDelete[id], undefined);
 
-  const addedMapAfterDelete = JSON.parse(await readFile(path.join(dataDir, "video-added-map.json"), "utf-8"));
-  assert.equal(addedMapAfterDelete[id], undefined);
+  const listRes = await app.inject({ method: "GET", url: "/api/videos" });
+  assert.equal(listRes.statusCode, 200);
+  assert.equal((listRes.json().videos || []).some((video) => video.id === id), false);
 });

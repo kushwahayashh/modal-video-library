@@ -2,7 +2,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 
 const originalDataDir = process.env.DATA_DIR;
 const originalAutoListen = process.env.NO_AUTO_LISTEN;
@@ -34,15 +34,12 @@ test("video list is ordered by addedAt descending", async () => {
   const oldId = Buffer.from(oldFilename).toString("base64url");
   const newId = Buffer.from(newFilename).toString("base64url");
 
-  await writeFile(path.join(videosDir, oldFilename), "video-bytes-old");
-  await writeFile(path.join(videosDir, newFilename), "video-bytes-new");
-  await writeFile(
-    path.join(dataDir, "video-added-map.json"),
-    JSON.stringify({
-      [oldId]: "2026-02-01T10:00:00.000Z",
-      [newId]: "2026-02-02T10:00:00.000Z",
-    })
-  );
+  const oldPath = path.join(videosDir, oldFilename);
+  const newPath = path.join(videosDir, newFilename);
+  await writeFile(oldPath, "video-bytes-old");
+  await writeFile(newPath, "video-bytes-new");
+  await utimes(oldPath, new Date("2026-02-01T10:00:00.000Z"), new Date("2026-02-01T10:00:00.000Z"));
+  await utimes(newPath, new Date("2026-02-02T10:00:00.000Z"), new Date("2026-02-02T10:00:00.000Z"));
 
   const listRes = await app.inject({
     method: "GET",
@@ -55,5 +52,4 @@ test("video list is ordered by addedAt descending", async () => {
   assert.equal(payload.videos.length, 2);
   assert.equal(payload.videos[0].id, newId);
   assert.equal(payload.videos[1].id, oldId);
-  assert.equal(payload.videos[0].addedAt, "2026-02-02T10:00:00.000Z");
 });

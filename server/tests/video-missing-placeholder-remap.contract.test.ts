@@ -2,7 +2,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 
 const originalDataDir = process.env.DATA_DIR;
 const originalAutoListen = process.env.NO_AUTO_LISTEN;
@@ -48,10 +48,12 @@ test("videos endpoint repairs stale placeholder mapping when image file no longe
   const staleThumbnail = "/api/placeholder-images/missing.jpg";
 
   await writeFile(path.join(videosDir, filename), "video-bytes");
-  await writeFile(
-    path.join(dataDir, "thumbnail-map.json"),
-    JSON.stringify({ [videoId]: staleThumbnail })
-  );
+  const writeThumbRes = await app.inject({
+    method: "POST",
+    url: "/api/thumbnail-map",
+    payload: { videoId, imageUrl: staleThumbnail },
+  });
+  assert.equal(writeThumbRes.statusCode, 200);
 
   const placeholdersRes = await app.inject({
     method: "GET",
@@ -72,8 +74,8 @@ test("videos endpoint repairs stale placeholder mapping when image file no longe
   assert.equal(video.thumbnail === staleThumbnail, false);
   assert.equal(availableImages.has(video.thumbnail), true);
 
-  const persistedThumbMap = JSON.parse(
-    await readFile(path.join(dataDir, "thumbnail-map.json"), "utf-8")
-  );
+  const thumbMapRes = await app.inject({ method: "GET", url: "/api/thumbnail-map" });
+  assert.equal(thumbMapRes.statusCode, 200);
+  const persistedThumbMap = thumbMapRes.json();
   assert.equal(persistedThumbMap[videoId], video.thumbnail);
 });

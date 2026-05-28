@@ -7,8 +7,7 @@ Self-hosted video library for local or Modal runtime.
 - Scans videos recursively from `DATA_DIR/videos` and serves a searchable library UI.
 - Streams videos with HTTP range support (`/api/stream/:id`).
 - Generates and serves seek-preview sprites (`sprite.jpg` + `sprite.vtt`).
-- Persists deterministic thumbnail selections (`thumbnail-map.json`).
-- Tracks stable library ordering with `addedAt` metadata (`video-added-map.json`).
+- Persists video metadata, thumbnail selections, and watch progress in SQLite (`luna.db`).
 - Includes a browser terminal connected to a backend shell over WebSocket.
 
 ## Stack
@@ -64,8 +63,7 @@ Default `DATA_DIR` is `/data`.
 /data
 ├── videos/                 # Source videos (nested folders supported)
 ├── sprites/                # Generated sprite artifacts per video ID
-├── thumbnail-map.json      # videoId -> thumbnail URL
-└── video-added-map.json    # videoId -> stable addedAt timestamp
+└── luna.db                 # SQLite metadata index
 ```
 
 ## Key routes
@@ -95,4 +93,3 @@ Full reference in source: `server/src/routes/`.
 ```bash
 cd server && bun run test
 ```
-

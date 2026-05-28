@@ -2,7 +2,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 
 const originalDataDir = process.env.DATA_DIR;
 const originalAutoListen = process.env.NO_AUTO_LISTEN;
@@ -78,9 +78,4 @@ test("thumbnail map contract: read empty, write, and read persisted values", asy
     "video-b": "/api/placeholder-images/beta.jpeg",
   });
 
-  const persistedMapRaw = await readFile(path.join(dataDir, "thumbnail-map.json"), "utf-8");
-  assert.deepEqual(JSON.parse(persistedMapRaw), {
-    "video-a": "/api/placeholder-images/alpha.jpeg",
-    "video-b": "/api/placeholder-images/beta.jpeg",
-  });
 });

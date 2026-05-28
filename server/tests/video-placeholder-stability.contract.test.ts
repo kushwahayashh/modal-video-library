@@ -2,7 +2,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 
 const originalDataDir = process.env.DATA_DIR;
 const originalAutoListen = process.env.NO_AUTO_LISTEN;
@@ -80,11 +80,10 @@ test("existing videos keep their assigned thumbnail when new placeholder images 
   assert.equal(thirdThumbById[twoId], firstThumbById[twoId]);
   assert.equal(typeof thirdThumbById[threeId], "string");
 
-  const persistedThumbMap = JSON.parse(
-    await readFile(path.join(dataDir, "thumbnail-map.json"), "utf-8")
-  );
+  const thumbMapRes = await app.inject({ method: "GET", url: "/api/thumbnail-map" });
+  assert.equal(thumbMapRes.statusCode, 200);
+  const persistedThumbMap = thumbMapRes.json();
   assert.equal(persistedThumbMap[oneId], firstThumbById[oneId]);
   assert.equal(persistedThumbMap[twoId], firstThumbById[twoId]);
   assert.equal(persistedThumbMap[threeId], thirdThumbById[threeId]);
 });
-

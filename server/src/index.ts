@@ -8,7 +8,7 @@ import fs from "fs";
 import { promises as fsp } from "fs";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
-import { createJsonMapStore } from "./lib/json-map-store.js";
+import { createSqliteStore } from "./lib/sqlite-store.js";
 import { createSpriteService } from "./lib/sprite-generation.js";
 import { fileExists } from "./lib/files.js";
 import { registerVideoRoutes } from "./routes/videos.js";
@@ -71,9 +71,10 @@ try {
   // Images folder might be missing; ignore
 }
 
-const { read: readThumbMap, update: updateThumbMap } = createJsonMapStore(DATA_DIR, "thumbnail-map.json");
-const { read: readVideoAddedMap, update: updateVideoAddedMap } = createJsonMapStore(DATA_DIR, "video-added-map.json");
-const { read: readWatchProgress, update: updateWatchProgress } = createJsonMapStore(DATA_DIR, "watch-progress-map.json");
+const libraryStore = createSqliteStore(DATA_DIR);
+app.addHook("onClose", async () => {
+  libraryStore.close();
+});
 const { spriteJobs, runSpriteGeneration, isJobRunning, cancelJob } = createSpriteService({
   spritesDir: SPRITES_DIR,
   fileExists,
@@ -181,18 +182,14 @@ app.delete("/api/placeholder-images/:filename", async (request, reply) => {
   try {
     await fsp.unlink(filePath);
     
-    // Scrub deleted image from thumbnail-map.json so overrides aren't left dangling
-    await updateThumbMap((map) => {
-      const targetUrl = `/api/placeholder-images/${encodeURIComponent(filename)}`;
-      let changed = false;
-      for (const [vid, url] of Object.entries(map)) {
-        if (url === targetUrl) {
-          delete map[vid];
-          changed = true;
-        }
+    // Scrub deleted image from stored thumbnail overrides so assignments don't dangle.
+    const targetUrl = `/api/placeholder-images/${encodeURIComponent(filename)}`;
+    const currentThumbMap = libraryStore.getAllThumbnails();
+    for (const [vid, url] of Object.entries(currentThumbMap)) {
+      if (url === targetUrl) {
+        libraryStore.removeThumbnail(vid);
       }
-      return map; // Will only write if we actually modified something
-    });
+    }
 
     return { success: true };
   } catch (err) {
@@ -203,7 +200,9 @@ app.delete("/api/placeholder-images/:filename", async (request, reply) => {
   }
 });
 
-app.get("/api/thumbnail-map", async () => readThumbMap());
+app.get("/api/thumbnail-map", async () => {
+  return libraryStore.getAllThumbnails();
+});
 
 app.post("/api/thumbnail-map", async (request, reply) => {
   const { videoId, imageUrl } = (request.body as any) || {};
@@ -217,10 +216,7 @@ app.post("/api/thumbnail-map", async (request, reply) => {
     return reply.status(400).send({ error: "videoId and imageUrl required" });
   }
 
-  await updateThumbMap((map) => {
-    map[videoId.trim()] = imageUrl.trim();
-    return map;
-  });
+  libraryStore.setThumbnail(videoId.trim(), imageUrl.trim());
   return { success: true };
 });
 
@@ -253,19 +249,14 @@ app.get("/cf", async (_request, reply) => {
 });
 
 app.get("/api/watch-progress", async () => {
-  return await readWatchProgress();
+  return libraryStore.getAllProgress();
 });
 
 registerVideoRoutes(app, {
   VIDEOS_DIR,
   SPRITES_DIR,
   VIDEO_SCAN_CONCURRENCY,
-  readThumbMap,
-  updateThumbMap,
-  readVideoAddedMap,
-  updateVideoAddedMap,
-  readWatchProgress,
-  updateWatchProgress,
+  libraryStore,
   listPlaceholderImageUrls,
   touchActivity,
   spriteJobs,

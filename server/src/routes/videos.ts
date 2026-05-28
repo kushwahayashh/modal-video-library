@@ -13,15 +13,8 @@ import {
 import { fileExists, formatBytes } from "../lib/files.js";
 import { parseRangeHeader } from "../lib/http-range.js";
 
-function normalizeIsoTimestamp(value) {
-  if (typeof value !== "string") return null;
-  const ms = Date.parse(value);
-  if (!Number.isFinite(ms)) return null;
-  return new Date(ms).toISOString();
-}
-
 function fallbackAddedAt(stat) {
-  const candidates = [stat.ctimeMs, stat.birthtimeMs, stat.mtimeMs].filter(
+  const candidates = [stat.mtimeMs, stat.ctimeMs, stat.birthtimeMs].filter(
     (ms) => Number.isFinite(ms) && ms > 0
   );
   const ts = candidates.length > 0 ? candidates[0] : Date.now();
@@ -76,16 +69,63 @@ export function registerVideoRoutes(app, deps) {
     VIDEOS_DIR,
     SPRITES_DIR,
     VIDEO_SCAN_CONCURRENCY,
-    readThumbMap,
-    updateThumbMap,
-    readVideoAddedMap,
-    updateVideoAddedMap,
-    readWatchProgress,
-    updateWatchProgress,
+    libraryStore,
     listPlaceholderImageUrls,
     touchActivity,
     cancelJob,
   } = deps;
+
+  async function syncVideoIndex() {
+    if (!(await fileExists(VIDEOS_DIR))) {
+      libraryStore.deleteMissingVideos(`missing:${Date.now()}`);
+      return;
+    }
+
+    const placeholderImages = await listPlaceholderImageUrls();
+    const placeholderImageSet = new Set(placeholderImages);
+    const scanId = new Date().toISOString();
+
+    const entries = await fsp.readdir(VIDEOS_DIR, { recursive: true });
+    await mapWithConcurrency(entries, VIDEO_SCAN_CONCURRENCY, async (relPath) => {
+      try {
+        const ext = path.extname(relPath).toLowerCase();
+        if (!VIDEO_EXTENSIONS.has(ext)) return;
+
+        const filePath = path.join(VIDEOS_DIR, relPath);
+        const stat = await fsp.stat(filePath);
+        if (!stat.isFile()) return;
+
+        const normalizedPath = relPath.split(path.sep).join("/");
+        const videoId = toBase64Url(normalizedPath);
+        const existingVideo = libraryStore.getVideo(videoId);
+        const addedAt = existingVideo?.addedAt || fallbackAddedAt(stat);
+
+        const storedThumbnailRaw = normalizeNonEmptyString(libraryStore.getThumbnail(videoId));
+        const storedThumbnail = resolveStoredThumbnail(storedThumbnailRaw, placeholderImageSet);
+        const thumbnail = storedThumbnail || pickStablePlaceholder(videoId, placeholderImages);
+        if (thumbnail && storedThumbnailRaw !== thumbnail) {
+          libraryStore.setThumbnail(videoId, thumbnail);
+        }
+
+        libraryStore.upsertVideo({
+          id: videoId,
+          title: path.basename(relPath, ext),
+          filename: normalizedPath,
+          size: formatBytes(stat.size),
+          sizeBytes: stat.size,
+          createdAt: stat.birthtime.toISOString(),
+          modifiedAt: stat.mtime.toISOString(),
+          addedAt,
+          duration: await getVideoDuration(filePath),
+          lastSeenAt: scanId,
+        });
+      } catch {
+        // Ignore unreadable files during scan, matching previous best-effort behavior.
+      }
+    });
+
+    libraryStore.deleteMissingVideos(scanId);
+  }
 
   app.get("/api/videos", async (request) => {
     const query = request.query || {};
@@ -107,103 +147,26 @@ export function registerVideoRoutes(app, deps) {
       : 0;
 
     try {
-      if (!(await fileExists(VIDEOS_DIR))) return { videos: [], total: 0 };
+      await syncVideoIndex();
+      const { videos, total } = libraryStore.listVideos({
+        queryText,
+        offset,
+        limit,
+      });
+      const videosWithSprites = await mapWithConcurrency(
+        videos,
+        VIDEO_SCAN_CONCURRENCY,
+        async (video) => ({
+          ...video,
+          hasSprites: await fileExists(path.join(SPRITES_DIR, video.id, "sprite.jpg")),
+        })
+      );
 
-      const currentAddedMap = await readVideoAddedMap();
-      const currentThumbMap = await readThumbMap();
-      const placeholderImages = await listPlaceholderImageUrls();
-      const placeholderImageSet = new Set(placeholderImages);
-      const autoAssignedThumbMap = {};
-      const nextAddedMap = {};
-      let addedMapChanged = false;
-
-      const entries = await fsp.readdir(VIDEOS_DIR, { recursive: true });
-      const videos = (await mapWithConcurrency(entries, VIDEO_SCAN_CONCURRENCY, async (relPath) => {
-        try {
-          const ext = path.extname(relPath).toLowerCase();
-          if (!VIDEO_EXTENSIONS.has(ext)) return null;
-          const filePath = path.join(VIDEOS_DIR, relPath);
-          const stat = await fsp.stat(filePath);
-          if (!stat.isFile()) return null;
-          const duration = await getVideoDuration(filePath);
-          const normalizedPath = relPath.split(path.sep).join("/");
-          const videoId = toBase64Url(normalizedPath);
-          const storedAddedAt = normalizeIsoTimestamp(currentAddedMap[videoId]);
-          const addedAt = storedAddedAt || fallbackAddedAt(stat);
-          const storedThumbnailRaw = normalizeNonEmptyString(currentThumbMap[videoId]);
-          const storedThumbnail = resolveStoredThumbnail(
-            storedThumbnailRaw,
-            placeholderImageSet
-          );
-          const thumbnail = storedThumbnail || pickStablePlaceholder(videoId, placeholderImages);
-          if (thumbnail && storedThumbnailRaw !== thumbnail) {
-            autoAssignedThumbMap[videoId] = thumbnail;
-          }
-          nextAddedMap[videoId] = addedAt;
-          if (storedAddedAt !== addedAt) {
-            addedMapChanged = true;
-          }
-          return {
-            id: videoId,
-            title: path.basename(relPath, ext),
-            filename: normalizedPath,
-            size: formatBytes(stat.size),
-            sizeBytes: stat.size,
-            createdAt: stat.birthtime,
-            addedAt,
-            thumbnail,
-            duration,
-            hasSprites: await fileExists(path.join(SPRITES_DIR, videoId, "sprite.jpg")),
-          };
-        } catch {
-          return null;
-        }
-      })).filter(Boolean);
-
-      if (Object.keys(currentAddedMap).length !== Object.keys(nextAddedMap).length) {
-        addedMapChanged = true;
-      }
-      if (addedMapChanged) {
-        await updateVideoAddedMap(() => nextAddedMap);
-      }
-      if (Object.keys(autoAssignedThumbMap).length > 0) {
-        try {
-          await updateThumbMap((thumbMap) => {
-            for (const [videoId, imageUrl] of Object.entries(autoAssignedThumbMap)) {
-              const existing = normalizeNonEmptyString(thumbMap[videoId]);
-              const existingIsMissingPlaceholder =
-                !!existing &&
-                existing.startsWith("/api/placeholder-images/") &&
-                !placeholderImageSet.has(existing);
-
-              if (!existing || existingIsMissingPlaceholder) {
-                thumbMap[videoId] = imageUrl;
-              }
-            }
-            return thumbMap;
-          });
-        } catch (e) {
-          console.warn("Failed to persist auto-assigned thumbnails:", e);
-        }
-      }
-
-      videos.sort((a, b) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime());
-
-      let filtered = videos;
-      if (queryText) {
-        filtered = videos.filter((video) => {
-          const title = String(video.title || "").toLowerCase();
-          const filename = String(video.filename || "").toLowerCase();
-          return title.includes(queryText) || filename.includes(queryText);
-        });
-      }
-
-      const total = filtered.length;
       if (!usePagination) {
-        return { videos: filtered, total };
+        return { videos: videosWithSprites, total };
       }
 
-      const pageVideos = filtered.slice(offset, offset + limit);
+      const pageVideos = videosWithSprites;
       const nextOffset = offset + pageVideos.length;
       const hasMore = nextOffset < total;
       return {
@@ -222,6 +185,7 @@ export function registerVideoRoutes(app, deps) {
 
   app.get("/api/videos/:id", async (request, reply) => {
     const { id } = request.params;
+    await syncVideoIndex();
     const filename = fromBase64Url(id);
     const filePath = safeResolve(VIDEOS_DIR, filename);
     if (!filePath) return reply.status(400).send({ error: "Invalid video ID" });
@@ -244,7 +208,7 @@ export function registerVideoRoutes(app, deps) {
       size: formatBytes(stats.size),
       sizeBytes: stats.size,
       createdAt: stats.birthtime,
-      addedAt: stats.ctime,
+      addedAt: libraryStore.getVideo(id)?.addedAt || stats.ctime,
       modifiedAt: stats.mtime,
       duration,
       ...metadata,
@@ -259,6 +223,7 @@ export function registerVideoRoutes(app, deps) {
       return reply.status(400).send({ error: "newName is required" });
     }
 
+    await syncVideoIndex();
     const oldFilename = fromBase64Url(id);
     const oldPath = safeResolve(VIDEOS_DIR, oldFilename);
     if (!oldPath) return reply.status(400).send({ error: "Invalid video ID" });
@@ -310,29 +275,7 @@ export function registerVideoRoutes(app, deps) {
       }
 
       if (newId !== id) {
-        await updateVideoAddedMap((addedMap) => {
-          if (addedMap[id]) {
-            addedMap[newId] = addedMap[id];
-            delete addedMap[id];
-          }
-          return addedMap;
-        });
-
-        await updateThumbMap((thumbMap) => {
-          if (thumbMap[id]) {
-            thumbMap[newId] = thumbMap[id];
-            delete thumbMap[id];
-          }
-          return thumbMap;
-        });
-
-        await updateWatchProgress((progressMap) => {
-          if (progressMap[id]) {
-            progressMap[newId] = progressMap[id];
-            delete progressMap[id];
-          }
-          return progressMap;
-        });
+        libraryStore.renameVideo(id, newId, newRelPath);
 
         if (deps.spriteJobs?.has(id)) {
            deps.cancelJob(id);
@@ -348,6 +291,7 @@ export function registerVideoRoutes(app, deps) {
 
   app.delete("/api/videos/:id", async (request, reply) => {
     const { id } = request.params;
+    await syncVideoIndex();
     const filename = fromBase64Url(id);
     const filePath = safeResolve(VIDEOS_DIR, filename);
     if (!filePath) return reply.status(400).send({ error: "Invalid video ID" });
@@ -364,26 +308,7 @@ export function registerVideoRoutes(app, deps) {
         await fsp.rm(spriteDir, { recursive: true, force: true });
       }
 
-      await updateThumbMap((thumbMap) => {
-        if (thumbMap[id]) {
-          delete thumbMap[id];
-        }
-        return thumbMap;
-      });
-
-      await updateVideoAddedMap((addedMap) => {
-        if (addedMap[id]) {
-          delete addedMap[id];
-        }
-        return addedMap;
-      });
-
-      await updateWatchProgress((progressMap) => {
-        if (progressMap[id]) {
-          delete progressMap[id];
-        }
-        return progressMap;
-      });
+      libraryStore.deleteVideo(id);
 
       if (deps.cancelJob) {
         deps.cancelJob(id);
@@ -400,8 +325,7 @@ export function registerVideoRoutes(app, deps) {
 
   app.get("/api/videos/:id/progress", async (request) => {
     const { id } = request.params;
-    const map = await readWatchProgress();
-    return map[id] || null;
+    return libraryStore.getProgress(id);
   });
 
   app.post("/api/videos/:id/progress", async (request, reply) => {
@@ -412,14 +336,11 @@ export function registerVideoRoutes(app, deps) {
       return reply.status(400).send({ error: "currentTime and duration required" });
     }
 
-    await updateWatchProgress((map) => {
-      if (duration > 0 && currentTime / duration >= 0.95) {
-        delete map[id];
-      } else {
-        map[id] = { currentTime, duration, updatedAt: new Date().toISOString() };
-      }
-      return map;
-    });
+    if (duration > 0 && currentTime / duration >= 0.95) {
+      libraryStore.removeProgress(id);
+    } else {
+      libraryStore.setProgress(id, currentTime, duration);
+    }
     return { success: true };
   });
 
