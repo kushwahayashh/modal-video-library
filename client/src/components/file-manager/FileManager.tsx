@@ -89,8 +89,22 @@ export default function FileManager({ embedded = false, onBack }: { embedded?: b
 
   useEffect(() => {
     if (renamingPath) {
-      renameInputRef.current?.focus();
-      renameInputRef.current?.select();
+      const input = renameInputRef.current;
+      if (input) {
+        input.focus();
+        // Select only the stem (before extension) so the extension is editable but not selected by default
+        const item = items.find((i) => i.path === renamingPath);
+        if (item && !item.isDirectory) {
+          const dotIndex = renameValue.lastIndexOf(".");
+          if (dotIndex > 0) {
+            input.setSelectionRange(0, dotIndex);
+          } else {
+            input.select();
+          }
+        } else {
+          input.select();
+        }
+      }
     }
   }, [renamingPath]);
 
@@ -139,9 +153,8 @@ export default function FileManager({ embedded = false, onBack }: { embedded?: b
     const item = items.find((i) => i.path === renamingPath);
     if (!item) return;
 
-    const ext = item.isDirectory ? "" : getExtension(item.name);
-    const newName = renameValue.trim() + ext;
-    if (!renameValue.trim() || newName === item.name) {
+    const newName = renameValue.trim();
+    if (!newName || newName === item.name) {
       setRenamingPath(null);
       return;
     }
@@ -299,7 +312,7 @@ export default function FileManager({ embedded = false, onBack }: { embedded?: b
     switch (action) {
       case "rename":
         setRenamingPath(item.path);
-        setRenameValue(item.isDirectory ? item.name : item.name.replace(getExtension(item.name), ""));
+        setRenameValue(item.name);
         break;
       case "delete":
         setDeleteConfirm(item);
@@ -524,10 +537,7 @@ export default function FileManager({ embedded = false, onBack }: { embedded?: b
                         className="fm-row-btn"
                         onClick={() => {
                           setRenamingPath(item.path);
-                          const ext = item.isDirectory ? "" : getExtension(item.name);
-                          setRenameValue(
-                            item.isDirectory ? item.name : item.name.replace(ext, "")
-                          );
+                          setRenameValue(item.name);
                         }}
                       >
                         <IconSignature size={20} /> Rename
