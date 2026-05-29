@@ -6,15 +6,15 @@
   max-width: calc(100vw - 16px);
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 4px 0;
   transform-origin: top left;
   animation: contextMenuEnter 0.14s ease-out;
-  will-change: transform, opacity;
 }
 
 .context-menu.closing {
   pointer-events: none;
+  will-change: transform, opacity;
   animation: contextMenuExit 0.14s ease-in forwards;
 }
 
@@ -71,14 +71,6 @@
   outline: none;
   background: var(--bg-card-hover);
   color: var(--text-primary);
-}
-
-.context-menu-item.danger {
-  color: var(--danger);
-}
-
-.context-menu-item.danger:hover {
-  background: var(--danger-subtle);
 }
 
 .context-menu-item svg {

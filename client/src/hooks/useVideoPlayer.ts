@@ -140,16 +140,12 @@ export function useVideoPlayer({ videoRef, videoId, spriteVttUrl, spriteImageUrl
     const video = videoRef.current;
     if (!video) return;
 
-    const onTimeUpdate = () => setCurrentTime(video.currentTime);
     const syncDuration = () => {
       const value = Number.isFinite(video.duration) ? video.duration : 0;
       setDuration(value > 0 ? value : 0);
     };
     const onLoadedMetadata = () => syncDuration();
     const onDurationChange = () => syncDuration();
-    const onPlay = () => setPlaying(true);
-    const onPause = () => setPlaying(false);
-    const onEnded = () => setPlaying(false);
     const onVolumeChange = () => {
       setVolumeState(video.volume);
       setMuted(video.muted);
@@ -163,22 +159,43 @@ export function useVideoPlayer({ videoRef, videoId, spriteVttUrl, spriteImageUrl
       }
     };
 
+    // rAF loop — updates currentTime at display refresh rate (~60fps) while playing
+    let rafId: number | null = null;
+    const tickRaf = () => {
+      setCurrentTime(video.currentTime);
+      rafId = requestAnimationFrame(tickRaf);
+    };
+    const startRaf = () => {
+      setPlaying(true);
+      if (rafId === null) rafId = requestAnimationFrame(tickRaf);
+    };
+    const stopRaf = (isEnded = false) => {
+      if (isEnded) setPlaying(false);
+      else setPlaying(false);
+      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
+      // Sync once on pause/end so the bar reflects the final settled position
+      setCurrentTime(video.currentTime);
+    };
+    // Paused seeks still need a currentTime sync
+    const onTimeUpdate = () => { if (video.paused) setCurrentTime(video.currentTime); };
+
     video.addEventListener("timeupdate", onTimeUpdate);
     video.addEventListener("loadedmetadata", onLoadedMetadata);
     video.addEventListener("durationchange", onDurationChange);
-    video.addEventListener("play", onPlay);
-    video.addEventListener("pause", onPause);
-    video.addEventListener("ended", onEnded);
+    video.addEventListener("play", startRaf);
+    video.addEventListener("pause", () => stopRaf(false));
+    video.addEventListener("ended", () => stopRaf(true));
     video.addEventListener("volumechange", onVolumeChange);
     video.addEventListener("progress", onProgress);
 
     return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
       video.removeEventListener("timeupdate", onTimeUpdate);
       video.removeEventListener("loadedmetadata", onLoadedMetadata);
       video.removeEventListener("durationchange", onDurationChange);
-      video.removeEventListener("play", onPlay);
-      video.removeEventListener("pause", onPause);
-      video.removeEventListener("ended", onEnded);
+      video.removeEventListener("play", startRaf);
+      video.removeEventListener("pause", () => stopRaf(false));
+      video.removeEventListener("ended", () => stopRaf(true));
       video.removeEventListener("volumechange", onVolumeChange);
       video.removeEventListener("progress", onProgress);
     };
@@ -471,24 +488,59 @@ export function useVideoPlayer({ videoRef, videoId, spriteVttUrl, spriteImageUrl
     };
   }, [videoId, videoRef]);
 
+  const [isRestoringProgress, setIsRestoringProgress] = useState(true);
+
   // Restore watch progress on mount
   useEffect(() => {
-    if (!videoId) return;
+    if (!videoId) {
+      setIsRestoringProgress(false);
+      return;
+    }
+    setIsRestoringProgress(true);
     let cancelled = false;
 
     const video = videoRef.current;
-    if (!video) return;
+    if (!video) {
+      setIsRestoringProgress(false);
+      return;
+    }
 
     const restore = async () => {
       try {
         const res = await fetch(`/api/videos/${videoId}/progress`);
-        if (!res.ok || cancelled) return;
+        if (cancelled) return;
+        if (!res.ok) {
+          setIsRestoringProgress(false);
+          return;
+        }
         const data = await res.json();
-        if (cancelled || !data || typeof data.currentTime !== "number") return;
-        if (data.currentTime < 2) return;
+        if (cancelled) return;
+        if (!data || typeof data.currentTime !== "number" || data.currentTime < 2) {
+          setIsRestoringProgress(false);
+          return;
+        }
 
         const applySeek = () => {
           if (cancelled) return;
+
+          let timeoutId: number | null = window.setTimeout(() => {
+            if (!cancelled) {
+              video.removeEventListener("seeked", onSeeked);
+              setIsRestoringProgress(false);
+            }
+          }, 1500);
+
+          const onSeeked = () => {
+            if (timeoutId !== null) {
+              window.clearTimeout(timeoutId);
+              timeoutId = null;
+            }
+            if (!cancelled) {
+              setIsRestoringProgress(false);
+            }
+          };
+
+          video.addEventListener("seeked", onSeeked, { once: true });
           video.currentTime = data.currentTime;
         };
 
@@ -497,7 +549,11 @@ export function useVideoPlayer({ videoRef, videoId, spriteVttUrl, spriteImageUrl
         } else {
           video.addEventListener("loadedmetadata", applySeek, { once: true });
         }
-      } catch {}
+      } catch {
+        if (!cancelled) {
+          setIsRestoringProgress(false);
+        }
+      }
     };
 
     restore();
@@ -528,5 +584,6 @@ export function useVideoPlayer({ videoRef, videoId, spriteVttUrl, spriteImageUrl
     getSpriteForTime,
     pauseControlsHide,
     resumeControlsHide,
+    isRestoringProgress,
   };
 }

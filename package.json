@@ -1,0 +1,10 @@
+{
+  "name": "luna",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "cd client && bun run build",
+    "install:all": "cd server && bun install && cd ../client && bun install"
+  }
+}

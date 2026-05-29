@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { IconTrashFilled } from "@tabler/icons-react";
 
 interface ThumbnailPickerProps {
   images: string[];
@@ -88,7 +87,7 @@ function ThumbnailPicker({ images, loading, selectedImage, onSelect, onDelete }:
                 }}
                 title="Delete thumbnail"
               >
-                <IconTrashFilled size={28} />
+                Delete
               </button>
             )}
           </div>

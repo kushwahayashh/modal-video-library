@@ -8,8 +8,13 @@ import {
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
-import { IconPlayerPlayFilled, IconPlayerPauseFilled, IconMaximize, IconMinimize, IconBrandSpeedtest, IconRewindBackward5, IconRewindForward5, IconVolume, IconVolume2, IconVolumeOff, IconSelectAll } from "@tabler/icons-react";
+import { IconPlayerPlayFilled, IconPlayerPauseFilled, IconMaximize, IconMinimize, IconBrandSpeedtest, IconRewindBackward5, IconRewindForward5, IconVolume, IconVolume2, IconVolumeOff, IconSelectAll, IconX } from "@tabler/icons-react";
 import { useVideoPlayer, type SpriteCue } from "../../hooks/useVideoPlayer";
+import PlayerContextMenu, { type PlayerContextMenuState } from "./PlayerContextMenu";
+import { formatBytes } from "../../utils";
+import type { VideoProperties } from "./types";
+import type { Video } from "../../types";
+import VideoActionModal from "./VideoActionModal";
 
 interface CustomVideoPlayerProps {
   videoId: string;
@@ -79,16 +84,74 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
     getSpriteForTime,
     pauseControlsHide,
     resumeControlsHide,
+    isRestoringProgress,
   } = useVideoPlayer({ videoRef, videoId, spriteVttUrl, spriteImageUrl });
 
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [fillToEdge, setFillToEdge] = useState(false);
+  const [showProperties, setShowProperties] = useState(false);
+  const [propertiesClosing, setPropertiesClosing] = useState(false);
+  const [propertiesVideoMeta, setPropertiesVideoMeta] = useState<Video | null>(null);
+  const [propertiesData, setPropertiesData] = useState<VideoProperties | null>(null);
+
+  useEffect(() => {
+    if (!showProperties) return;
+    setPropertiesData(null);
+    let active = true;
+    fetch(`/api/videos/${videoId}`)
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load properties");
+        return r.json();
+      })
+      .then((data) => {
+        if (active) {
+          setPropertiesData(data);
+          setPropertiesVideoMeta(data);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          const fallback: VideoProperties = {
+            id: videoId,
+            title: `Video (${videoId})`,
+            filename: `stream_${videoId}.mp4`,
+            size: "",
+            duration: "",
+            hasSprites: hasSprites || false,
+          };
+          setPropertiesData(fallback);
+          setPropertiesVideoMeta(fallback);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [showProperties, videoId, hasSprites]);
+
+  const closePropertiesModal = useCallback(() => {
+    setPropertiesClosing(true);
+  }, []);
+
+  const finalizeClosePropertiesModal = useCallback(() => {
+    setPropertiesClosing(false);
+    setShowProperties(false);
+    setPropertiesData(null);
+    setPropertiesVideoMeta(null);
+  }, []);
+  const [contextMenu, setContextMenu] = useState<PlayerContextMenuState>({
+    visible: false,
+    x: 0,
+    y: 0,
+  });
+  const contextMenuJustClosedRef = useRef(false);
+  const contextMenuCloseTimerRef = useRef<number | null>(null);
   const [spritePreview, setSpritePreview] = useState<SpritePreview | null>(null);
   const [spriteImageReady, setSpriteImageReady] = useState(false);
   const spriteHoverRef = useRef<SpriteHover | null>(null);
   const spriteTimerRef = useRef<number | null>(null);
   const spriteHideTimerRef = useRef<number | null>(null);
   const isScrubbingRef = useRef(false);
+  const [scrubPercent, setScrubPercent] = useState<number | null>(null);
 
   useEffect(() => {
     if (!showSpeedMenu) return;
@@ -143,6 +206,7 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
     return () => {
       if (spriteTimerRef.current !== null) window.clearTimeout(spriteTimerRef.current);
       if (spriteHideTimerRef.current !== null) window.clearTimeout(spriteHideTimerRef.current);
+      if (contextMenuCloseTimerRef.current !== null) window.clearTimeout(contextMenuCloseTimerRef.current);
     };
   }, []);
 
@@ -180,6 +244,9 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
     if (rect.width <= 0) return null;
     const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
     const ratio = x / rect.width;
+    if (isScrubbingRef.current) {
+      setScrubPercent(ratio * 100);
+    }
     return { time: ratio * mediaDuration, x };
   }, [duration]);
 
@@ -255,6 +322,7 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
   const handleProgressPointerUp = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     if (!isScrubbingRef.current) return;
     isScrubbingRef.current = false;
+    setScrubPercent(null);
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
@@ -266,6 +334,7 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
     isScrubbingRef.current = false;
+    setScrubPercent(null);
     clearProgressHover();
   }, [clearProgressHover]);
 
@@ -288,8 +357,104 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
   }, [setVolume, volume]);
 
   const handleSeekStep = useCallback((delta: number) => {
-    seek(currentTime + delta);
-  }, [currentTime, seek]);
+    const time = videoRef.current?.currentTime ?? 0;
+    seek(time + delta);
+  }, [seek]);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu((prev) => {
+      if (prev.visible) {
+        contextMenuJustClosedRef.current = true;
+        if (contextMenuCloseTimerRef.current !== null) {
+          window.clearTimeout(contextMenuCloseTimerRef.current);
+        }
+        contextMenuCloseTimerRef.current = window.setTimeout(() => {
+          contextMenuJustClosedRef.current = false;
+          contextMenuCloseTimerRef.current = null;
+        }, 200);
+      }
+      return { ...prev, visible: false };
+    });
+  }, []);
+
+  const handleContextMenu = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const container = containerRef.current;
+    const rect = container?.getBoundingClientRect();
+    const x = rect ? e.clientX - rect.left : e.clientX;
+    const y = rect ? e.clientY - rect.top : e.clientY;
+
+    if (contextMenuJustClosedRef.current) {
+      closeContextMenu();
+      return;
+    }
+
+    setContextMenu({ visible: true, x, y });
+  }, [containerRef, closeContextMenu]);
+
+  const [showStats, setShowStats] = useState(false);
+  const [videoMeta, setVideoMeta] = useState({ width: 0, height: 0, loop: false, playbackRate: 1 });
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const syncMeta = () => {
+      setVideoMeta({
+        width: video.videoWidth,
+        height: video.videoHeight,
+        loop: video.loop,
+        playbackRate: video.playbackRate,
+      });
+    };
+    video.addEventListener("loadedmetadata", syncMeta);
+    video.addEventListener("ratechange", syncMeta);
+    return () => {
+      video.removeEventListener("loadedmetadata", syncMeta);
+      video.removeEventListener("ratechange", syncMeta);
+    };
+  }, []);
+
+  const handleContextMenuAction = useCallback((action: string) => {
+    const video = videoRef.current;
+    switch (action) {
+      case "play-pause":
+        togglePlay();
+        break;
+      case "back-5":
+        handleSeekStep(-5);
+        break;
+      case "forward-5":
+        handleSeekStep(5);
+        break;
+      case "loop":
+        if (video) {
+          video.loop = !video.loop;
+          setVideoMeta((prev) => ({ ...prev, loop: video.loop }));
+        }
+        break;
+      case "stats":
+        setShowStats((prev) => !prev);
+        break;
+      case "info":
+        setPropertiesVideoMeta({
+          id: videoId,
+          title: "Loading...",
+          filename: "",
+          size: "",
+          duration: "",
+          hasSprites: hasSprites || false,
+        });
+        setShowProperties(true);
+        break;
+      case "copy-link":
+        void navigator.clipboard.writeText(window.location.origin + `/api/stream/${videoId}`);
+        break;
+      case "download":
+        window.open(`/api/stream/${videoId}?download=1`, "_blank");
+        break;
+    }
+  }, [togglePlay, handleSeekStep, videoId, hasSprites]);
 
   const handleVolumePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -335,7 +500,7 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
     wrap.addEventListener("pointercancel", cleanup);
   }, [setVolume]);
 
-  const playedPercent = duration ? (currentTime / duration) * 100 : 0;
+  const playedPercent = scrubPercent !== null ? scrubPercent : (duration ? (currentTime / duration) * 100 : 0);
   const bufferedPercent = buffered * 100;
 
   const volumeLevel: 0 | 1 | 2 = muted || volume === 0 ? 0 : volume < 0.5 ? 1 : 2;
@@ -348,16 +513,72 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
     ? Math.max(spriteEdge, Math.min(spritePreview.x, Math.max(spriteEdge, progressWidth - spriteEdge)))
     : 0;
 
+  const hasVideoDetails = !!(
+    propertiesData?.resolution ||
+    propertiesData?.videoCodec ||
+    propertiesData?.videoBitrate ||
+    propertiesData?.framerate ||
+    propertiesData?.pixelFormat
+  );
+  const hasAudioDetails = !!(
+    propertiesData?.audioCodec ||
+    propertiesData?.audioBitrate ||
+    propertiesData?.audioChannels ||
+    propertiesData?.sampleRate
+  );
+
   return (
     <div
       ref={containerRef}
-      className={`vp-container ${fillToEdge ? "vp-fit-cover" : ""} ${showControls || !playing ? "" : "vp-hide-cursor"}`}
+      className={`vp-container ${fillToEdge ? "vp-fit-cover" : ""} ${showControls || !playing ? "" : "vp-hide-cursor"} ${isRestoringProgress ? "vp-loading-video" : ""}`}
       tabIndex={0}
       onPointerDown={() => containerRef.current?.focus()}
+      onContextMenu={handleContextMenu}
     >
-      <video ref={videoRef} onClick={togglePlay} playsInline preload="metadata">
+      <video ref={videoRef} onClick={() => {
+        if (contextMenuJustClosedRef.current) return;
+        togglePlay();
+      }} playsInline preload="metadata">
         <source src={`/api/stream/${videoId}`} />
       </video>
+
+      {showStats && (
+        <div className="vp-stats-overlay" onClick={(e) => e.stopPropagation()}>
+          <div className="vp-stats-header">
+            <span>Stats for Nerds</span>
+            <button className="vp-stats-close" onClick={() => setShowStats(false)}><IconX size={14} /></button>
+          </div>
+          <div className="vp-stats-row"><span>Resolution</span><span>{videoMeta.width}×{videoMeta.height}</span></div>
+          <div className="vp-stats-row"><span>Duration</span><span>{formatTime(duration)}</span></div>
+          <div className="vp-stats-row"><span>Current Time</span><span>{formatTime(currentTime)}</span></div>
+          <div className="vp-stats-row"><span>Volume</span><span>{Math.round(volume * 100)}%</span></div>
+          <div className="vp-stats-row"><span>Speed</span><span>{videoMeta.playbackRate}x</span></div>
+          <div className="vp-stats-row"><span>Loop</span><span>{videoMeta.loop ? "On" : "Off"}</span></div>
+          <div className="vp-stats-row"><span>Buffered</span><span>{Math.round(buffered * 100)}%</span></div>
+        </div>
+      )}
+
+      {showProperties && (
+        <VideoActionModal
+          actionModal="properties"
+          closing={propertiesClosing}
+          actionVideo={propertiesVideoMeta}
+          actionLoading={false}
+          renameValue=""
+          onRenameValueChange={() => {}}
+          onClose={closePropertiesModal}
+          onClosed={finalizeClosePropertiesModal}
+          onRenameKeyDown={() => {}}
+          onConfirmRename={() => {}}
+          onConfirmDelete={() => {}}
+          videoProps={propertiesData}
+          hasVideoDetails={hasVideoDetails}
+          hasAudioDetails={hasAudioDetails}
+          placeholderImages={[]}
+          placeholdersLoading={false}
+          onThumbnailSelect={() => {}}
+        />
+      )}
 
       {!playing && (
       <button className="vp-big-play" onClick={togglePlay} aria-label="Play">
@@ -502,6 +723,14 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
           </div>
         </div>
       </div>
+
+      <PlayerContextMenu
+        state={contextMenu}
+        playing={playing}
+        containerRef={containerRef}
+        onClose={closeContextMenu}
+        onAction={handleContextMenuAction}
+      />
     </div>
   );
 }
