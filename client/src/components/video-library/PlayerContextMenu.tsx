@@ -28,6 +28,7 @@ export interface PlayerContextMenuState {
 interface PlayerContextMenuProps {
   state: PlayerContextMenuState;
   playing: boolean;
+  loop: boolean;
   containerRef: React.RefObject<HTMLElement | null>;
   onClose: () => void;
   onAction: (action: string) => void;
@@ -38,6 +39,7 @@ interface MenuItem {
   label: string;
   icon: typeof IconPlayerPlayFilled;
   stroke?: number;
+  active?: boolean;
 }
 
 const VIEWPORT_MARGIN = 8;
@@ -66,7 +68,7 @@ function getMenuPosition(
   };
 }
 
-export default function PlayerContextMenu({ state, playing, containerRef, onClose, onAction }: PlayerContextMenuProps) {
+export default function PlayerContextMenu({ state, playing, loop, containerRef, onClose, onAction }: PlayerContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const closeTimerRef = useRef<number | null>(null);
@@ -85,13 +87,13 @@ export default function PlayerContextMenu({ state, playing, containerRef, onClos
       },
       { id: "back-5", label: "Back 5 seconds", icon: IconRewindBackward5, stroke: 2.5 },
       { id: "forward-5", label: "Forward 5 seconds", icon: IconRewindForward5, stroke: 2.5 },
-      { id: "loop", label: "Loop", icon: IconRepeat, stroke: 2.5 },
+      { id: "loop", label: "Loop", icon: IconRepeat, stroke: 2.5, active: loop },
       { id: "stats", label: "Stats for nerds", icon: IconChartBar, stroke: 2.5 },
       { id: "info", label: "Properties", icon: IconInfoCircle, stroke: 2.5 },
       { id: "copy-link", label: "Copy video URL", icon: IconCopy, stroke: 2.5 },
       { id: "download", label: "Download", icon: IconDownload, stroke: 2.5 },
     ],
-    [playing]
+    [playing, loop]
   );
 
   useEffect(() => {
@@ -252,8 +254,9 @@ export default function PlayerContextMenu({ state, playing, containerRef, onClos
             }}
             type="button"
             role="menuitem"
+            aria-checked={item.active}
             tabIndex={index === activeIndex ? 0 : -1}
-            className="context-menu-item"
+            className={`context-menu-item${item.active ? " context-menu-item--active" : ""}`}
             onMouseEnter={() => setActiveIndex(index)}
             onFocus={() => setActiveIndex(index)}
             onClick={() => {
@@ -263,6 +266,7 @@ export default function PlayerContextMenu({ state, playing, containerRef, onClos
           >
             <item.icon size={MENU_ICON_SIZE} stroke={item.stroke} />
             <span>{item.label}</span>
+            {item.active && <span className="context-menu-item-tick" aria-hidden>✓</span>}
           </button>
         </div>
       ))}

@@ -40,8 +40,8 @@ const SPRITE_HOVER_DELAY = 180;
 const SPRITE_HIDE_DELAY = 120;
 const SPRITE_SCALE = 0.92;
 const SPRITE_MIN_EDGE = 28;
-const BIG_PLAY_ICON_SIZE = 44;
 const CONTROL_ICON_SIZE = 26;
+const FLASH_ICON_SIZE = 52;
 
 function formatTime(seconds: number): string {
   if (!isFinite(seconds) || seconds < 0) return "0:00";
@@ -60,6 +60,13 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
   const progressRef = useRef<HTMLDivElement>(null);
   const volumeTrackRef = useRef<HTMLDivElement>(null);
   const speedMenuRef = useRef<HTMLDivElement>(null);
+
+  // Button refs for keyboard-shortcut press animations
+  const btnPlayRef = useRef<HTMLButtonElement>(null);
+  const btnSeekBackRef = useRef<HTMLButtonElement>(null);
+  const btnSeekFwdRef = useRef<HTMLButtonElement>(null);
+  const btnMuteRef = useRef<HTMLButtonElement>(null);
+  const btnFullscreenRef = useRef<HTMLButtonElement>(null);
 
   const spriteVttUrl = hasSprites ? `/api/sprites/${videoId}/vtt` : undefined;
   const spriteImageUrl = hasSprites ? `/api/sprites/${videoId}/image` : undefined;
@@ -138,6 +145,27 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
     setPropertiesData(null);
     setPropertiesVideoMeta(null);
   }, []);
+
+  const triggerPress = useCallback((btn: HTMLButtonElement) => {
+    btn.classList.remove("vp-btn-pressing");
+    void btn.offsetWidth; // force reflow to restart animation on rapid clicks
+    btn.classList.add("vp-btn-pressing");
+    const onEnd = () => {
+      btn.classList.remove("vp-btn-pressing");
+      btn.removeEventListener("animationend", onEnd);
+    };
+    btn.addEventListener("animationend", onEnd);
+  }, []);
+
+  const pressBtn = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    triggerPress(e.currentTarget);
+  }, [triggerPress]);
+
+  const pressBtnKey = useCallback((e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key === " " || e.key === "Enter") {
+      triggerPress(e.currentTarget);
+    }
+  }, [triggerPress]);
   const [contextMenu, setContextMenu] = useState<PlayerContextMenuState>({
     visible: false,
     x: 0,
@@ -152,6 +180,15 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
   const spriteHideTimerRef = useRef<number | null>(null);
   const isScrubbingRef = useRef(false);
   const [scrubPercent, setScrubPercent] = useState<number | null>(null);
+  const [playFlash, setPlayFlash] = useState<{ id: number; playing: boolean } | null>(null);
+  const [seekFlash, setSeekFlash] = useState<{ id: number; dir: "back" | "fwd" } | null>(null);
+  const flashCounterRef = useRef(0);
+
+  const triggerSeekFlash = useCallback((dir: "back" | "fwd") => {
+    const id = ++flashCounterRef.current;
+    setSeekFlash({ id, dir });
+    window.setTimeout(() => setSeekFlash((f) => f?.id === id ? null : f), 600);
+  }, []);
 
   useEffect(() => {
     if (!showSpeedMenu) return;
@@ -172,10 +209,42 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
         e.preventDefault();
         setFillToEdge((prev) => !prev);
       }
+      // Seek buttons have no state to watch, so animate them from the keyboard handler
+      if (e.key === "ArrowLeft") { triggerPress(btnSeekBackRef.current!); triggerSeekFlash("back"); }
+      else if (e.key === "ArrowRight") { triggerPress(btnSeekFwdRef.current!); triggerSeekFlash("fwd"); }
     };
     container.addEventListener("keydown", handleKeyDown);
     return () => container.removeEventListener("keydown", handleKeyDown);
-  }, [containerRef]);
+  }, [containerRef, triggerPress, triggerSeekFlash]);
+
+  // Animate play button whenever playing state changes (covers center-click, keyboard, button)
+  const prevPlayingRef = useRef(playing);
+  useEffect(() => {
+    if (prevPlayingRef.current === playing) return;
+    prevPlayingRef.current = playing;
+    if (btnPlayRef.current) triggerPress(btnPlayRef.current);
+    // Also flash the in-video overlay
+    const id = ++flashCounterRef.current;
+    setPlayFlash({ id, playing });
+    const t = window.setTimeout(() => setPlayFlash((f) => f?.id === id ? null : f), 600);
+    return () => window.clearTimeout(t);
+  }, [playing, triggerPress]);
+
+  // Animate mute button whenever muted state changes
+  const prevMutedRef = useRef(muted);
+  useEffect(() => {
+    if (prevMutedRef.current === muted) return;
+    prevMutedRef.current = muted;
+    if (btnMuteRef.current) triggerPress(btnMuteRef.current);
+  }, [muted, triggerPress]);
+
+  // Animate fullscreen button whenever fullscreen state changes
+  const prevFsRef = useRef(isFullscreen);
+  useEffect(() => {
+    if (prevFsRef.current === isFullscreen) return;
+    prevFsRef.current = isFullscreen;
+    if (btnFullscreenRef.current) triggerPress(btnFullscreenRef.current);
+  }, [isFullscreen, triggerPress]);
 
   useEffect(() => {
     if (!spriteImageUrl) {
@@ -359,7 +428,8 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
   const handleSeekStep = useCallback((delta: number) => {
     const time = videoRef.current?.currentTime ?? 0;
     seek(time + delta);
-  }, [seek]);
+    triggerSeekFlash(delta < 0 ? "back" : "fwd");
+  }, [seek, triggerSeekFlash]);
 
   const closeContextMenu = useCallback(() => {
     setContextMenu((prev) => {
@@ -580,10 +650,20 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
         />
       )}
 
-      {!playing && (
-      <button className="vp-big-play" onClick={togglePlay} aria-label="Play">
-          <IconPlayerPlayFilled size={BIG_PLAY_ICON_SIZE} fill="currentColor" strokeWidth={0} />
-      </button>
+      {playFlash && (
+        <div key={playFlash.id} className="vp-center-flash">
+          {playFlash.playing
+            ? <IconPlayerPlayFilled size={FLASH_ICON_SIZE} fill="currentColor" strokeWidth={0} />
+            : <IconPlayerPauseFilled size={FLASH_ICON_SIZE} fill="currentColor" strokeWidth={0} />}
+        </div>
+      )}
+
+      {seekFlash && (
+        <div key={seekFlash.id} className={`vp-seek-flash vp-seek-flash--${seekFlash.dir}`}>
+          {seekFlash.dir === "back"
+            ? <IconRewindBackward5 size={FLASH_ICON_SIZE} />
+            : <IconRewindForward5 size={FLASH_ICON_SIZE} />}
+        </div>
       )}
 
       <div
@@ -634,7 +714,7 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
 
         <div className="vp-controls-row">
           <div className="vp-controls-left">
-            <button className="vp-btn" onClick={togglePlay} aria-label={playing ? "Pause" : "Play"}>
+            <button ref={btnPlayRef} className="vp-btn" onClick={togglePlay} aria-label={playing ? "Pause" : "Play"}>
               {playing ? (
                 <IconPlayerPauseFilled size={CONTROL_ICON_SIZE} fill="currentColor" strokeWidth={0} />
               ) : (
@@ -642,16 +722,16 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
               )}
             </button>
 
-            <button className="vp-btn" onClick={() => handleSeekStep(-5)} aria-label="Seek backward 5 seconds" title="Back 5 seconds">
+            <button ref={btnSeekBackRef} className="vp-btn" onClick={() => handleSeekStep(-5)} onPointerDown={pressBtn} onKeyDown={pressBtnKey} aria-label="Seek backward 5 seconds" title="Back 5 seconds">
               <IconRewindBackward5 size={CONTROL_ICON_SIZE} />
             </button>
 
-            <button className="vp-btn" onClick={() => handleSeekStep(5)} aria-label="Seek forward 5 seconds" title="Forward 5 seconds">
+            <button ref={btnSeekFwdRef} className="vp-btn" onClick={() => handleSeekStep(5)} onPointerDown={pressBtn} onKeyDown={pressBtnKey} aria-label="Seek forward 5 seconds" title="Forward 5 seconds">
               <IconRewindForward5 size={CONTROL_ICON_SIZE} />
             </button>
 
             <div className="vp-volume-group" onWheel={handleVolumeWheel}>
-              <button className="vp-btn" onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"}>
+              <button ref={btnMuteRef} className="vp-btn" onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"}>
                 {volumeLevel === 0 ? <IconVolumeOff size={CONTROL_ICON_SIZE} /> : volumeLevel === 1 ? <IconVolume size={CONTROL_ICON_SIZE} /> : <IconVolume2 size={CONTROL_ICON_SIZE} />}
               </button>
               <div
@@ -676,6 +756,8 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
               <button
                 className="vp-btn vp-speed-btn"
                 onClick={toggleSpeedMenu}
+                onPointerDown={pressBtn}
+                onKeyDown={pressBtnKey}
                 aria-label={`Playback speed ${playbackRate}x`}
                 title={`Playback speed ${playbackRate}x`}
               >
@@ -706,6 +788,8 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
             <button
               className={`vp-btn ${fillToEdge ? "vp-btn-active" : ""}`}
               onClick={() => setFillToEdge((prev) => !prev)}
+              onPointerDown={pressBtn}
+              onKeyDown={pressBtnKey}
               aria-label={fillToEdge ? "Fit video in frame" : "Fill video to edges"}
               title={fillToEdge ? "Fit video in frame" : "Fill video to edges"}
               aria-pressed={fillToEdge}
@@ -713,7 +797,7 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
               <IconSelectAll size={CONTROL_ICON_SIZE - 1} />
             </button>
 
-            <button className="vp-btn" onClick={toggleFullscreen} aria-label="Fullscreen">
+            <button ref={btnFullscreenRef} className="vp-btn" onClick={toggleFullscreen} aria-label="Fullscreen">
               {isFullscreen ? (
                 <IconMinimize size={CONTROL_ICON_SIZE} />
               ) : (
@@ -727,6 +811,7 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
       <PlayerContextMenu
         state={contextMenu}
         playing={playing}
+        loop={videoMeta.loop}
         containerRef={containerRef}
         onClose={closeContextMenu}
         onAction={handleContextMenuAction}
