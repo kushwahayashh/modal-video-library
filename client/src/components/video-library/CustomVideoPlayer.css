@@ -469,7 +469,7 @@
   z-index: 20;
   min-width: 220px;
   font-size: 0.8125rem;
-  font-family: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', 'Consolas', monospace;
+  font-family: 'Space Mono', ui-monospace, Menlo, Consolas, monospace;
   color: var(--text-primary);
 }
 

@@ -1,0 +1,573 @@
+/* DownloadsPage.css */
+.dl-page {
+  width: 100%;
+  min-height: 100vh;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding-top: 88px;
+  padding-bottom: 40px;
+}
+
+.dl-container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Card ── */
+.dl-card {
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dl-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.dl-row-url {
+  flex-wrap: wrap;
+}
+
+.dl-row-actions {
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.dl-row-spacer {
+  flex: 1;
+}
+
+@media (max-width: 640px) {
+  .dl-row-spacer {
+    display: none;
+  }
+}
+
+/* ── Inputs ── */
+.dl-input {
+  width: 100%;
+  height: 40px;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border: none;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-family: inherit;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.dl-input:focus {
+  outline: none;
+  background: var(--bg-card-hover);
+}
+
+.dl-input::placeholder {
+  color: var(--text-muted);
+}
+
+.dl-input-url {
+  flex: 1;
+  min-width: 240px;
+}
+
+.dl-input-sm {
+  padding: 8px 10px;
+  font-size: 0.8125rem;
+}
+
+/* Hide number input spinners (increment/decrement arrows) */
+.dl-input[type="number"]::-webkit-outer-spin-button,
+.dl-input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.dl-input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+
+
+/* ── Dropdown Downloader Selector ── */
+.dl-select-wrapper {
+  position: relative;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.dl-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--bg-tertiary);
+  border: none;
+  color: var(--text-primary);
+  padding: 10px 32px 10px 14px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 4px;
+  height: 40px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.dl-select:focus {
+  outline: none;
+  background: var(--bg-card-hover);
+}
+
+.dl-select-arrow {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dl-select option {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.dl-select-format {
+  max-width: 260px;
+  text-overflow: ellipsis;
+}
+
+/* ── Buttons ── */
+.dl-primary-btn,
+.dl-secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dl-primary-btn {
+  height: 40px;
+  padding: 0 20px;
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  font-weight: 600;
+}
+
+.dl-primary-btn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.dl-secondary-btn {
+  height: 40px;
+  padding: 0 16px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.dl-secondary-btn:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.dl-secondary-btn-sm {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 0.75rem;
+}
+
+.dl-primary-btn:disabled,
+.dl-secondary-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.dl-stop-icon {
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: color 0.15s ease, transform 0.1s ease;
+  display: block;
+}
+
+.dl-stop-icon:hover {
+  color: var(--danger);
+  transform: scale(1.1);
+}
+
+.dl-text-btn {
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dl-danger-text-btn {
+  color: var(--text-muted);
+}
+
+.dl-danger-text-btn:hover {
+  color: var(--danger);
+  background: var(--danger-subtle);
+}
+
+/* ── Info card ── */
+.dl-info-card {
+  display: flex;
+  gap: 14px;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+}
+
+.dl-info-loading,
+.dl-info-error {
+  align-items: center;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.dl-info-error {
+  color: var(--text-secondary);
+}
+
+
+
+.dl-info-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dl-info-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dl-info-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.dl-info-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dl-info-formats {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 460px;
+}
+
+/* ── Options ── */
+.dl-options {
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  padding: 14px;
+}
+
+.dl-options-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.dl-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dl-field-full {
+  grid-column: 1 / -1;
+}
+
+.dl-field-label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.dl-field .dl-input {
+  background: var(--bg-card);
+}
+
+.dl-field .dl-input:focus {
+  background: var(--bg-card-hover);
+}
+
+.dl-field-help {
+  font-size: 0.7125rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.dl-field-help code {
+  font-family: 'Space Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.7125rem;
+  background: var(--bg-card);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+/* ── Section ── */
+.dl-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dl-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dl-section-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.dl-logs-target {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.dl-section-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.dl-empty {
+  padding: 24px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+/* ── Jobs ── */
+.dl-jobs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dl-job {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.dl-job:hover {
+  background: var(--bg-card);
+}
+
+.dl-job-selected {
+  background: var(--bg-card);
+}
+
+.dl-job-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dl-job-title-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.dl-job-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+
+.dl-tool-tag {
+  display: inline-block;
+  padding: 1px 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-radius: 2px;
+  font-family: 'Space Mono', ui-monospace, Menlo, Consolas, monospace;
+  text-transform: lowercase;
+  letter-spacing: 0;
+}
+
+.dl-job-status {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.dl-status-active { color: var(--text-secondary); }
+.dl-status-done { color: var(--success); }
+.dl-status-error { color: var(--danger); }
+.dl-status-cancelled { color: var(--text-muted); }
+.dl-status-idle { color: var(--text-muted); }
+
+.dl-job-error {
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+
+.dl-job-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.dl-progress-track {
+  width: 100%;
+  height: 3px;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.dl-progress-bar {
+  height: 100%;
+  background: var(--text-primary);
+  transition: width 0.3s ease;
+}
+
+.dl-progress-done {
+  background: var(--success);
+}
+
+.dl-progress-error {
+  background: var(--danger);
+}
+
+.dl-job-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.dl-meta-pct {
+  color: var(--text-secondary);
+  font-weight: 500;
+  min-width: 36px;
+}
+
+.dl-meta-sep {
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+/* ── Inline Job Logs ── */
+.dl-job-logs {
+  margin-top: 12px;
+  height: 180px; /* around 8 lines of text */
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 12px;
+  overflow-y: auto;
+  font-family: 'Space Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.dl-log-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.dl-job-logs-empty {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  text-align: center;
+  padding-top: 64px;
+}
+
+/* ── Spinner ── */
+.dl-spin {
+  animation: dl-spin 1s linear infinite;
+}
+
+@keyframes dl-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .dl-container {
+    padding: 0 16px;
+  }
+  .dl-info-card {
+    flex-direction: column;
+  }
+}
