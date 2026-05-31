@@ -9,27 +9,27 @@
 }
 
 .dl-container {
-  max-width: 1280px;
+  max-width: 1800px;
   margin: 0 auto;
-  padding: 0 24px;
+  padding: 0 16px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
 }
 
 /* ── Card ── */
 .dl-card {
   background: var(--bg-secondary);
   border-radius: 4px;
-  padding: 16px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
 .dl-row {
   display: flex;
-  gap: 12px;
+  gap: 16px;
   align-items: center;
 }
 
@@ -55,12 +55,12 @@
 /* ── Inputs ── */
 .dl-input {
   width: 100%;
-  height: 40px;
-  padding: 10px 12px;
+  height: 48px;
+  padding: 12px 16px;
   background: var(--bg-tertiary);
   border: none;
   color: var(--text-primary);
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-family: inherit;
   border-radius: 4px;
   transition: background 0.2s ease;
@@ -78,11 +78,6 @@
 .dl-input-url {
   flex: 1;
   min-width: 240px;
-}
-
-.dl-input-sm {
-  padding: 8px 10px;
-  font-size: 0.8125rem;
 }
 
 /* Hide number input spinners (increment/decrement arrows) */
@@ -112,11 +107,11 @@
   background: var(--bg-tertiary);
   border: none;
   color: var(--text-primary);
-  padding: 10px 32px 10px 14px;
-  font-size: 0.875rem;
+  padding: 12px 36px 12px 16px;
+  font-size: 0.9375rem;
   font-weight: 500;
   border-radius: 4px;
-  height: 40px;
+  height: 48px;
   cursor: pointer;
   transition: background-color 0.15s ease;
 }
@@ -154,19 +149,19 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   border: none;
   border-radius: 4px;
   font-family: inherit;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .dl-primary-btn {
-  height: 40px;
-  padding: 0 20px;
+  height: 48px;
+  padding: 0 24px;
   background: var(--text-primary);
   color: var(--bg-primary);
   font-weight: 600;
@@ -177,8 +172,8 @@
 }
 
 .dl-secondary-btn {
-  height: 40px;
-  padding: 0 16px;
+  height: 48px;
+  padding: 0 20px;
   background: var(--bg-card);
   color: var(--text-secondary);
   border: 1px solid var(--border);
@@ -188,12 +183,6 @@
   background: var(--bg-card-hover);
   color: var(--text-primary);
   border-color: var(--text-muted);
-}
-
-.dl-secondary-btn-sm {
-  height: 28px;
-  padding: 0 10px;
-  font-size: 0.75rem;
 }
 
 .dl-primary-btn:disabled,
@@ -240,8 +229,8 @@
 /* ── Info card ── */
 .dl-info-card {
   display: flex;
-  gap: 14px;
-  padding: 12px;
+  gap: 16px;
+  padding: 16px;
   background: var(--bg-tertiary);
   border-radius: 4px;
 }
@@ -249,7 +238,7 @@
 .dl-info-loading,
 .dl-info-error {
   align-items: center;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: var(--text-secondary);
 }
 
@@ -264,11 +253,11 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .dl-info-title {
-  font-size: 0.9375rem;
+  font-size: 1.0625rem;
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: -0.01em;
@@ -279,9 +268,9 @@
 
 .dl-info-meta {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   color: var(--text-muted);
 }
 
@@ -291,31 +280,23 @@
   gap: 4px;
 }
 
-.dl-info-formats {
-  margin-top: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-width: 460px;
-}
-
 /* ── Options ── */
 .dl-options {
   background: var(--bg-tertiary);
   border-radius: 4px;
-  padding: 14px;
+  padding: 20px;
 }
 
 .dl-options-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
 }
 
 .dl-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -324,7 +305,7 @@
 }
 
 .dl-field-label {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
@@ -339,25 +320,11 @@
   background: var(--bg-card-hover);
 }
 
-.dl-field-help {
-  font-size: 0.7125rem;
-  color: var(--text-muted);
-  line-height: 1.5;
-}
-
-.dl-field-help code {
-  font-family: 'Space Mono', ui-monospace, Menlo, Consolas, monospace;
-  font-size: 0.7125rem;
-  background: var(--bg-card);
-  padding: 1px 4px;
-  border-radius: 2px;
-}
-
 /* ── Section ── */
 .dl-section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .dl-section-head {
@@ -367,20 +334,12 @@
 }
 
 .dl-section-title {
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-secondary);
   margin: 0;
-}
-
-.dl-logs-target {
-  font-weight: 400;
-  text-transform: none;
-  letter-spacing: 0;
-  color: var(--text-muted);
-  font-size: 0.75rem;
 }
 
 .dl-section-count {
@@ -408,8 +367,8 @@
 .dl-job {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px;
+  gap: 12px;
+  padding: 16px 20px;
   background: var(--bg-secondary);
   border-radius: 4px;
   cursor: pointer;
@@ -426,9 +385,9 @@
 
 .dl-job-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
 }
 
 .dl-job-title-wrap {
@@ -437,7 +396,7 @@
 }
 
 .dl-job-title {
-  font-size: 0.875rem;
+  font-size: 1rem;
   font-weight: 500;
   color: var(--text-primary);
   overflow: hidden;
@@ -508,8 +467,8 @@
 .dl-job-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.75rem;
+  gap: 8px;
+  font-size: 0.8125rem;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -528,14 +487,14 @@
 /* ── Inline Job Logs ── */
 .dl-job-logs {
   margin-top: 12px;
-  height: 180px; /* around 8 lines of text */
+  height: 240px; /* around 10 lines of text */
   background: var(--bg-primary);
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 10px 12px;
+  padding: 12px 16px;
   overflow-y: auto;
   font-family: 'Space Mono', ui-monospace, Menlo, Consolas, monospace;
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   line-height: 1.5;
   color: var(--text-secondary);
 }
@@ -547,9 +506,9 @@
 
 .dl-job-logs-empty {
   color: var(--text-muted);
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   text-align: center;
-  padding-top: 64px;
+  padding-top: 96px;
 }
 
 /* ── Spinner ── */

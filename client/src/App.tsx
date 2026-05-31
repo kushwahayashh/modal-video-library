@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, type MouseEvent } from "react";
 import { IconSearch, IconSearchOff, IconCircleXFilled, IconFolderOpenFilled } from "@tabler/icons-react";
 import "./App.css";
 import type { Video } from "./types";
@@ -15,6 +15,7 @@ import VideoActionModal from "./components/video-library/VideoActionModal";
 import ProcessesModal from "./components/video-library/ProcessesModal";
 import ThumbnailBrowserModal from "./components/video-library/ThumbnailBrowserModal";
 import FileManager from "./components/file-manager/FileManager";
+import DownloadsPage from "./components/downloads/DownloadsPage";
 
 function App() {
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
@@ -25,6 +26,7 @@ function App() {
   const [thumbBrowserOpen, setThumbBrowserOpen] = useState(false);
   const [thumbBrowserClosing, setThumbBrowserClosing] = useState(false);
   const [fileManagerOpen, setFileManagerOpen] = useState(() => window.location.pathname === "/files");
+  const [downloadsOpen, setDownloadsOpen] = useState(() => window.location.pathname === "/downloads");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [watchProgress, setWatchProgress] = useState<Record<string, { currentTime: number; duration: number }>>({});
   const closeTimerRef = useRef<number | null>(null);
@@ -82,16 +84,17 @@ function App() {
   }, [search]);
 
   useEffect(() => {
-    document.title = fileManagerOpen ? "Files" : "Video Library";
-    const targetPath = fileManagerOpen ? "/files" : "/";
+    document.title = downloadsOpen ? "Downloads" : fileManagerOpen ? "Files" : "Video Library";
+    const targetPath = downloadsOpen ? "/downloads" : fileManagerOpen ? "/files" : "/";
     if (window.location.pathname !== targetPath) {
-      window.history.pushState({ fileManager: fileManagerOpen }, "", targetPath);
+      window.history.pushState({ fileManager: fileManagerOpen, downloads: downloadsOpen }, "", targetPath);
     }
-  }, [fileManagerOpen]);
+  }, [fileManagerOpen, downloadsOpen]);
 
   useEffect(() => {
     const onPopState = () => {
       setFileManagerOpen(window.location.pathname === "/files");
+      setDownloadsOpen(window.location.pathname === "/downloads");
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -272,6 +275,26 @@ function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedVideo, closeModal, actionModal, processesModalOpen, thumbBrowserOpen, hasOpenModal]);
 
+  if (downloadsOpen) {
+    return <DownloadsPage onBack={() => setDownloadsOpen(false)} />;
+  }
+
+  if (fileManagerOpen) {
+    return <FileManager onBack={() => setFileManagerOpen(false)} />;
+  }
+
+  const openDownloads = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+    event.preventDefault();
+    setDownloadsOpen(true);
+  };
+
+  const openFiles = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+    event.preventDefault();
+    setFileManagerOpen(true);
+  };
+
   return (
     <div className={`app${hasOpenModal ? " modal-open" : ""}`}>
       <nav className="nav">
@@ -311,16 +334,14 @@ function App() {
               </button>
             )}
             <button className="nav-btn" onClick={() => setThumbBrowserOpen(true)}>Thumbnails</button>
-            <a href={fileManagerOpen ? "/" : "/files"} className="nav-btn nav-btn-terminal" onClick={(e) => { if (!e.ctrlKey && !e.metaKey && !e.shiftKey) { e.preventDefault(); setFileManagerOpen(!fileManagerOpen); } }}>{fileManagerOpen ? "Videos" : "Files"}</a>
+            <a href="/downloads" className="nav-btn nav-btn-terminal" onClick={openDownloads}>Downloads</a>
+            <a href="/files" className="nav-btn nav-btn-terminal" onClick={openFiles}>Files</a>
             <a href="/terminal" target="_blank" rel="noopener noreferrer" className="nav-btn nav-btn-terminal">Terminal</a>
           </div>
         </div>
       </nav>
 
-      {fileManagerOpen ? (
-        <FileManager embedded onBack={() => setFileManagerOpen(false)} />
-      ) : (
-        <main className="main">
+      <main className="main">
           <div className="container">
             {videosError && videos.length > 0 && (
               <div className="status-banner" role="status" aria-live="polite">
@@ -380,8 +401,7 @@ function App() {
               </>
             )}
           </div>
-        </main>
-      )}
+      </main>
 
       <ContextMenu state={contextMenu} onClose={closeContextMenu} onAction={handleContextAction} />
 

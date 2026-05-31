@@ -3,8 +3,6 @@ import { toast } from "sonner";
 import {
   IconFolderFilled,
   IconFileFilled,
-  IconArrowLeft,
-  IconChevronRight,
   IconLoader,
   IconFolderPlus,
   IconSignature,
@@ -25,7 +23,7 @@ type FileItem = {
   modifiedAt: string;
 };
 
-export default function FileManager({ embedded = false, onBack }: { embedded?: boolean; onBack?: () => void } = {}) {
+export default function FileManager({ onBack }: { onBack?: () => void } = {}) {
   const [currentPath, setCurrentPath] = useState("/");
   const [parentPath, setParentPath] = useState<string | null>(null);
   const [items, setItems] = useState<FileItem[]>([]);
@@ -77,7 +75,7 @@ export default function FileManager({ embedded = false, onBack }: { embedded?: b
   };
 
   useEffect(() => {
-    if (!embedded) document.title = "Files";
+    document.title = "Files";
     fetchFiles("/");
   }, []);
 
@@ -113,10 +111,6 @@ export default function FileManager({ embedded = false, onBack }: { embedded?: b
     setRenamingPath(null);
     setDeleteConfirm(null);
     fetchFiles(dirPath);
-  };
-
-  const goUp = () => {
-    if (parentPath) navigateTo(parentPath);
   };
 
   const handleCreateFolder = async () => {
@@ -340,80 +334,75 @@ export default function FileManager({ embedded = false, onBack }: { embedded?: b
   });
 
   return (
-    <div className={`fm-app ${embedded ? "fm-app-embedded" : ""}`}>
-      {!embedded && (
-        <nav className="nav">
-          <div className="container nav-content">
-            <a className="nav-logo" href="/cf">
-              VIDEO<span>LIB</span>
-            </a>
-            <div className="nav-right">
-              <a href="/" className="nav-btn nav-btn-terminal">
-                Video Library
-              </a>
-              <a href="/terminal" target="_blank" rel="noopener noreferrer" className="nav-btn nav-btn-terminal">
-                Terminal
-              </a>
-            </div>
-          </div>
-        </nav>
-      )}
+    <div className="fm-app">
+      <nav className="nav">
+        <div className="container nav-content">
+          <a className="nav-logo" href="/cf">
+            VIDEO<span>LIB</span> FILES
+          </a>
 
-      <div className="fm-container">
-        <div className="fm-toolbar">
-          <div className="fm-toolbar-left">
-            <button
-              className="fm-toolbar-btn"
-              onClick={goUp}
-              disabled={!parentPath}
-              title="Go up"
-            >
-              <IconArrowLeft size={22} />
-            </button>
-            <div className="fm-breadcrumbs">
-              {breadcrumbs.map((seg, i) => {
-                const isLast = i === breadcrumbs.length - 1;
-                return (
-                  <React.Fragment key={i}>
-                    {i > 0 && (
-                      <span className="fm-breadcrumb-sep">
-                        <IconChevronRight size={16} />
-                      </span>
-                    )}
-                    <span className="fm-breadcrumb-segment">
-                      <button
-                        className={`fm-breadcrumb-btn ${isLast ? "active" : ""}`}
-                        onClick={() => navigateTo(breadcrumbPaths[i])}
-                        disabled={isLast}
-                      >
-                        {seg === "/" ? "root" : seg}
-                      </button>
-                    </span>
-                  </React.Fragment>
-                );
-              })}
-            </div>
+          <div className="fm-nav-breadcrumbs">
+            {breadcrumbs.map((seg, i) => {
+              const isLast = i === breadcrumbs.length - 1;
+              return (
+                <React.Fragment key={i}>
+                  {i > 0 && (
+                    <span className="fm-breadcrumb-sep">/</span>
+                  )}
+                  <span className="fm-breadcrumb-segment">
+                    <button
+                      className={`fm-breadcrumb-btn ${isLast ? "active" : ""}`}
+                      onClick={() => navigateTo(breadcrumbPaths[i])}
+                      disabled={isLast}
+                    >
+                      {seg === "/" ? "root" : seg}
+                    </button>
+                  </span>
+                </React.Fragment>
+              );
+            })}
           </div>
-          <div className="fm-toolbar-right">
+
+          <div className="nav-right">
             <button
-              className="fm-toolbar-btn"
+              type="button"
+              className="nav-btn nav-btn-terminal"
               onClick={() => fetchFiles(currentPath)}
               title="Refresh"
             >
-              <IconLoader size={22} />
+              <IconLoader size={18} />
             </button>
             <button
-              className="fm-toolbar-btn"
+              type="button"
+              className="nav-btn nav-btn-terminal"
               onClick={() => {
                 setCreatingFolder(true);
                 setNewFolderName("");
               }}
             >
-              <IconFolderPlus size={22} /> <span>New Folder</span>
+              <IconFolderPlus size={18} />
+              New Folder
             </button>
+            <a
+              href="/"
+              className="nav-btn nav-btn-terminal"
+              onClick={(e) => {
+                if (onBack && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+                  e.preventDefault();
+                  onBack();
+                }
+              }}
+            >
+              Video Library
+            </a>
+            <a href="/terminal" target="_blank" rel="noopener noreferrer" className="nav-btn nav-btn-terminal">
+              Terminal
+            </a>
           </div>
         </div>
+      </nav>
 
+      <div className="fm-container">
         <div className="fm-list">
           <div className="fm-row fm-row-header">
             <div className="fm-col-name">Name</div>
@@ -457,6 +446,20 @@ export default function FileManager({ embedded = false, onBack }: { embedded?: b
             </div>
           ) : (
             <>
+              {parentPath && (
+                <div
+                  className="fm-row fm-row-item fm-row-dir fm-row-parent-dir"
+                  onClick={() => navigateTo(parentPath)}
+                >
+                  <div className="fm-col-name">
+                    <IconFolderFilled size={22} className="fm-icon-folder" />
+                    <span className="fm-name">..</span>
+                  </div>
+                  <div className="fm-col-size">—</div>
+                  <div className="fm-col-modified">—</div>
+                  <div className="fm-col-actions"></div>
+                </div>
+              )}
               {creatingFolder && (
                 <div className="fm-row fm-row-item fm-row-new-folder">
                   <div className="fm-col-name">

@@ -15,6 +15,8 @@ import { registerVideoRoutes } from "./routes/videos.js";
 import { registerSpriteRoutes } from "./routes/sprites.js";
 import { registerTerminalRoutes } from "./routes/terminal.js";
 import { registerFileRoutes } from "./routes/files.js";
+import { registerDownloadRoutes } from "./routes/downloads.js";
+import { createDownloadService } from "./lib/download-service.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = Fastify({ logger: false, routerOptions: { maxParamLength: 500 } });
@@ -79,6 +81,7 @@ const { spriteJobs, runSpriteGeneration, isJobRunning, cancelJob } = createSprit
   spritesDir: SPRITES_DIR,
   fileExists,
 });
+const downloadService = createDownloadService({ videosDir: VIDEOS_DIR });
 
 async function listPlaceholderImageUrls() {
   try {
@@ -278,6 +281,8 @@ registerTerminalRoutes(app, {
 });
 
 registerFileRoutes(app, { DATA_DIR });
+
+registerDownloadRoutes(app, { downloadService, touchActivity });
 
 app.setNotFoundHandler(async (request, reply) => {
   if (request.url.startsWith("/api/") || request.url.startsWith("/ws/")) {
