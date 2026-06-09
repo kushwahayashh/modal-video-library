@@ -29,11 +29,25 @@ function normalizeNonEmptyString(value) {
 
 function pickStablePlaceholder(seed, placeholders) {
   if (placeholders.length === 0) return null;
-  let hash = 0;
-  for (let i = 0; i < seed.length; i += 1) {
-    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  // Rendezvous hashing (Highest Random Weight) — adding or removing a placeholder
+  // only reassigns the videos that were mapped to it, instead of scrambling all.
+  let best = placeholders[0];
+  let maxHash = -1;
+  for (let i = 0; i < placeholders.length; i++) {
+    const url = placeholders[i];
+    const filename = url.split("/").pop() || url;
+    const str = seed + "|" + filename;
+    let h = 0;
+    for (let j = 0; j < str.length; j++) {
+      h = (Math.imul(31, h) + str.charCodeAt(j)) | 0;
+    }
+    h = h >>> 0;
+    if (h > maxHash) {
+      maxHash = h;
+      best = url;
+    }
   }
-  return placeholders[hash % placeholders.length] || null;
+  return best;
 }
 
 function resolveStoredThumbnail(value, placeholderImageSet) {
