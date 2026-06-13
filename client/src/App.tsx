@@ -30,6 +30,7 @@ function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [watchProgress, setWatchProgress] = useState<Record<string, { currentTime: number; duration: number }>>({});
   const closeTimerRef = useRef<number | null>(null);
+  const libraryVersionRef = useRef<number | null>(null);
   const { contextMenu, openContextMenu, closeContextMenu } = useContextMenuState();
   const {
     videos,
@@ -130,6 +131,47 @@ function App() {
   }, []);
 
   const { activeSpriteJobs, refresh: refreshSpriteProgress } = useSpriteProgress(handleSpriteJobSettled);
+
+  useEffect(() => {
+    let active = true;
+    let timer: number | null = null;
+
+    const checkLibraryVersion = async () => {
+      if (!active || fileManagerOpen || downloadsOpen) return;
+      try {
+        const res = await fetch("/api/videos/version");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!Number.isFinite(data?.version)) return;
+
+        const nextVersion = Number(data.version);
+        if (libraryVersionRef.current === null) {
+          libraryVersionRef.current = nextVersion;
+          return;
+        }
+
+        if (libraryVersionRef.current !== nextVersion) {
+          libraryVersionRef.current = nextVersion;
+          await fetchVideos();
+          fetchWatchProgress();
+        }
+      } catch {
+        // Ignore transient polling errors.
+      }
+    };
+
+    void checkLibraryVersion();
+    timer = window.setInterval(checkLibraryVersion, 7000);
+    window.addEventListener("focus", checkLibraryVersion);
+    document.addEventListener("visibilitychange", checkLibraryVersion);
+
+    return () => {
+      active = false;
+      if (timer !== null) window.clearInterval(timer);
+      window.removeEventListener("focus", checkLibraryVersion);
+      document.removeEventListener("visibilitychange", checkLibraryVersion);
+    };
+  }, [downloadsOpen, fetchVideos, fetchWatchProgress, fileManagerOpen]);
 
   useEffect(() => {
     if (processesModalOpen && activeSpriteJobs.length === 0) {

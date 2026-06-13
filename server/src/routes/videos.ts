@@ -78,6 +78,31 @@ async function mapWithConcurrency(items, concurrency, mapper) {
   return results;
 }
 
+async function buildLibrarySignature(videosDir) {
+  if (!(await fileExists(videosDir))) return "missing";
+
+  const entries = await fsp.readdir(videosDir, { recursive: true });
+  const parts = [];
+  for (const relPath of entries) {
+    try {
+      const ext = path.extname(relPath).toLowerCase();
+      if (!VIDEO_EXTENSIONS.has(ext)) continue;
+
+      const filePath = path.join(videosDir, relPath);
+      const stat = await fsp.stat(filePath);
+      if (!stat.isFile()) continue;
+
+      const normalizedPath = relPath.split(path.sep).join("/");
+      parts.push(`${normalizedPath}:${stat.size}:${Math.floor(stat.mtimeMs)}`);
+    } catch {
+      // Ignore files that are changing or disappear during the lightweight scan.
+    }
+  }
+
+  parts.sort();
+  return parts.join("\n");
+}
+
 export function registerVideoRoutes(app, deps) {
   const {
     VIDEOS_DIR,
@@ -88,6 +113,53 @@ export function registerVideoRoutes(app, deps) {
     touchActivity,
     cancelJob,
   } = deps;
+
+  let libraryVersion = 0;
+  let stableLibrarySignature = null;
+  let pendingLibrarySignature = null;
+  let pendingLibrarySignatureAt = 0;
+  let versionCheckPromise = null;
+
+  async function checkLibraryVersion() {
+    if (versionCheckPromise) return versionCheckPromise;
+
+    versionCheckPromise = (async () => {
+      const signature = await buildLibrarySignature(VIDEOS_DIR);
+      const now = Date.now();
+
+      if (stableLibrarySignature === null) {
+        stableLibrarySignature = signature;
+        pendingLibrarySignature = null;
+        pendingLibrarySignatureAt = 0;
+        return libraryVersion;
+      }
+
+      if (signature === stableLibrarySignature) {
+        pendingLibrarySignature = null;
+        pendingLibrarySignatureAt = 0;
+        return libraryVersion;
+      }
+
+      if (signature !== pendingLibrarySignature) {
+        pendingLibrarySignature = signature;
+        pendingLibrarySignatureAt = now;
+        return libraryVersion;
+      }
+
+      if (now - pendingLibrarySignatureAt >= 4000) {
+        stableLibrarySignature = signature;
+        pendingLibrarySignature = null;
+        pendingLibrarySignatureAt = 0;
+        libraryVersion += 1;
+      }
+
+      return libraryVersion;
+    })().finally(() => {
+      versionCheckPromise = null;
+    });
+
+    return versionCheckPromise;
+  }
 
   async function syncVideoIndex() {
     if (!(await fileExists(VIDEOS_DIR))) {
@@ -194,6 +266,16 @@ export function registerVideoRoutes(app, deps) {
     } catch (e) {
       console.error("Error reading videos:", e);
       return { videos: [], total: 0 };
+    }
+  });
+
+  app.get("/api/videos/version", async (_request, reply) => {
+    try {
+      const version = await checkLibraryVersion();
+      return { version };
+    } catch (e) {
+      console.error("Error checking video library version:", e);
+      return reply.status(500).send({ error: "Failed to check video library version" });
     }
   });
 
