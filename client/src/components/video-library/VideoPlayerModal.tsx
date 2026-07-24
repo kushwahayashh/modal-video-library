@@ -42,7 +42,7 @@ export default function VideoPlayerModal({
           )}
         </div>
         <div className="modal-player">
-          <CustomVideoPlayer videoId={selectedVideo.id} hasSprites={selectedVideo.hasSprites} />
+          <CustomVideoPlayer videoId={selectedVideo.id} hasSprites={selectedVideo.hasSprites} shareToken={selectedVideo.shareToken} />
         </div>
       </div>
     </div>

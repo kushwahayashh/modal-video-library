@@ -11,14 +11,18 @@ import {
 import { IconPlayerPlayFilled, IconPlayerPauseFilled, IconMaximize, IconMinimize, IconBrandSpeedtest, IconRewindBackward5, IconRewindForward5, IconVolume, IconVolume2, IconVolumeOff, IconSelectAll, IconX } from "@tabler/icons-react";
 import { useVideoPlayer, type SpriteCue } from "../../hooks/useVideoPlayer";
 import PlayerContextMenu, { type PlayerContextMenuState } from "./PlayerContextMenu";
-import { formatBytes } from "../../utils";
+import { formatBytes, buildStreamUrl } from "../../utils";
 import type { VideoProperties } from "./types";
 import type { Video } from "../../types";
 import VideoActionModal from "./VideoActionModal";
 
 interface CustomVideoPlayerProps {
-  videoId: string;
+  videoId?: string;
   hasSprites?: boolean;
+  /** Signed token used to build shareable (password-free) copy/download links. */
+  shareToken?: string;
+  /** When set, play this URL directly instead of the library stream endpoint. */
+  streamSrc?: string;
 }
 
 interface SpriteHover {
@@ -55,11 +59,14 @@ function formatTime(seconds: number): string {
   return `${m}:${ss}`;
 }
 
-export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPlayerProps) {
+export default function CustomVideoPlayer({ videoId, hasSprites, shareToken, streamSrc }: CustomVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const volumeTrackRef = useRef<HTMLDivElement>(null);
   const speedMenuRef = useRef<HTMLDivElement>(null);
+
+  // External streams have no library id, so the source comes from streamSrc.
+  const sourceUrl = streamSrc ?? (videoId ? `/api/stream/${videoId}` : "");
 
   // Button refs for keyboard-shortcut press animations
   const btnPlayRef = useRef<HTMLButtonElement>(null);
@@ -103,6 +110,7 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
 
   useEffect(() => {
     if (!showProperties) return;
+    if (!videoId) return;
     setPropertiesData(null);
     let active = true;
     fetch(`/api/videos/${videoId}`)
@@ -508,7 +516,7 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
         break;
       case "info":
         setPropertiesVideoMeta({
-          id: videoId,
+          id: videoId ?? "",
           title: "Loading...",
           filename: "",
           size: "",
@@ -518,13 +526,18 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
         setShowProperties(true);
         break;
       case "copy-link":
-        void navigator.clipboard.writeText(window.location.origin + `/api/stream/${videoId}`);
+        void navigator.clipboard.writeText(
+          streamSrc ? streamSrc : buildStreamUrl(videoId ?? "", { shareToken, absolute: true })
+        );
         break;
       case "download":
-        window.open(`/api/stream/${videoId}?download=1`, "_blank");
+        window.open(
+          streamSrc ? streamSrc : buildStreamUrl(videoId ?? "", { download: true, shareToken }),
+          "_blank"
+        );
         break;
     }
-  }, [togglePlay, handleSeekStep, videoId, hasSprites]);
+  }, [togglePlay, handleSeekStep, videoId, hasSprites, shareToken, streamSrc]);
 
   const handleVolumePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -609,7 +622,7 @@ export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPl
         if (contextMenuJustClosedRef.current) return;
         togglePlay();
       }} playsInline preload="metadata">
-        <source src={`/api/stream/${videoId}`} />
+        <source src={sourceUrl} />
       </video>
 
       {showStats && (

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, type MouseEvent } from "react
 import { IconSearch, IconSearchOff, IconCircleXFilled, IconFolderOpenFilled } from "@tabler/icons-react";
 import "./App.css";
 import type { Video } from "./types";
+import { buildStreamUrl } from "./utils";
 import { useSpriteProgress, type SpriteProgressJob } from "./hooks/useSpriteProgress";
 import { useVideoLibraryData } from "./hooks/useVideoLibraryData";
 import { useContextMenuState } from "./hooks/useContextMenuState";
@@ -11,6 +12,7 @@ import { toast } from "sonner";
 import ContextMenu from "./components/video-library/ContextMenu";
 import VirtualizedVideoGrid from "./components/video-library/VirtualizedVideoGrid";
 import VideoPlayerModal from "./components/video-library/VideoPlayerModal";
+import StreamModal from "./components/video-library/StreamModal";
 import VideoActionModal from "./components/video-library/VideoActionModal";
 import ProcessesModal from "./components/video-library/ProcessesModal";
 import ThumbnailBrowserModal from "./components/video-library/ThumbnailBrowserModal";
@@ -23,6 +25,9 @@ function App() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [processesModalOpen, setProcessesModalOpen] = useState(false);
+  const [streamOpen, setStreamOpen] = useState(false);
+  const [streamVisible, setStreamVisible] = useState(false);
+  const streamCloseTimerRef = useRef<number | null>(null);
   const [thumbBrowserOpen, setThumbBrowserOpen] = useState(false);
   const [thumbBrowserClosing, setThumbBrowserClosing] = useState(false);
   const [fileManagerOpen, setFileManagerOpen] = useState(() => window.location.pathname === "/files");
@@ -214,16 +219,38 @@ function App() {
     }, 300);
   }, [fetchWatchProgress]);
 
+  const openStream = useCallback(() => {
+    if (streamCloseTimerRef.current !== null) {
+      window.clearTimeout(streamCloseTimerRef.current);
+      streamCloseTimerRef.current = null;
+    }
+    setStreamOpen(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setStreamVisible(true));
+    });
+  }, []);
+
+  const closeStream = useCallback(() => {
+    setStreamVisible(false);
+    if (streamCloseTimerRef.current !== null) {
+      window.clearTimeout(streamCloseTimerRef.current);
+    }
+    streamCloseTimerRef.current = window.setTimeout(() => {
+      setStreamOpen(false);
+      streamCloseTimerRef.current = null;
+    }, 300);
+  }, []);
+
   const handleContextAction = (action: string, video: Video) => {
     switch (action) {
       case "play":
         openModal(video);
         break;
       case "download":
-        window.open(`/api/stream/${video.id}?download=1`, "_blank");
+        window.open(buildStreamUrl(video.id, { download: true, shareToken: video.shareToken }), "_blank");
         break;
       case "copy-link":
-        navigator.clipboard.writeText(`${window.location.origin}/api/stream/${video.id}`)
+        navigator.clipboard.writeText(buildStreamUrl(video.id, { shareToken: video.shareToken, absolute: true }))
           .then(() => toast.success("Video link copied"))
           .catch(() => toast.error("Failed to copy video link"));
         break;
@@ -247,7 +274,7 @@ function App() {
 
   const hasActiveSearch = debouncedSearch.length > 0;
   const isSearchPending = search.trim() !== debouncedSearch;
-  const hasOpenModal = !!selectedVideo || !!actionModal || processesModalOpen || thumbBrowserOpen;
+  const hasOpenModal = !!selectedVideo || !!actionModal || processesModalOpen || thumbBrowserOpen || streamOpen;
 
   useEffect(() => {
     const { body, documentElement } = document;
@@ -290,6 +317,9 @@ function App() {
       if (closeTimerRef.current !== null) {
         window.clearTimeout(closeTimerRef.current);
       }
+      if (streamCloseTimerRef.current !== null) {
+        window.clearTimeout(streamCloseTimerRef.current);
+      }
     };
   }, []);
 
@@ -298,6 +328,8 @@ function App() {
       if (e.key === "Escape") {
         if (thumbBrowserOpen) {
           setThumbBrowserClosing(true);
+        } else if (streamOpen) {
+          closeStream();
         } else if (processesModalOpen) {
           setProcessesModalOpen(false);
         } else if (actionModal) {
@@ -315,7 +347,7 @@ function App() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedVideo, closeModal, actionModal, processesModalOpen, thumbBrowserOpen, hasOpenModal]);
+  }, [selectedVideo, closeModal, actionModal, processesModalOpen, thumbBrowserOpen, streamOpen, closeStream, hasOpenModal]);
 
   if (downloadsOpen) {
     return <DownloadsPage onBack={() => setDownloadsOpen(false)} />;
@@ -375,6 +407,7 @@ function App() {
                 <span className="nav-process-count">{activeSpriteJobs.length}</span>
               </button>
             )}
+            <button className="nav-btn" onClick={openStream}>Stream</button>
             <button className="nav-btn" onClick={() => setThumbBrowserOpen(true)}>Thumbnails</button>
             <a href="/downloads" className="nav-btn nav-btn-terminal" onClick={openDownloads}>Downloads</a>
             <a href="/files" className="nav-btn nav-btn-terminal" onClick={openFiles}>Files</a>
@@ -451,6 +484,12 @@ function App() {
         selectedVideo={selectedVideo}
         modalVisible={modalVisible}
         onClose={closeModal}
+      />
+
+      <StreamModal
+        open={streamOpen}
+        visible={streamVisible}
+        onClose={closeStream}
       />
 
       <VideoActionModal

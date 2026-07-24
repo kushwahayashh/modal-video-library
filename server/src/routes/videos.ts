@@ -12,6 +12,7 @@ import {
 } from "../lib/video-utils.js";
 import { fileExists, formatBytes } from "../lib/files.js";
 import { parseRangeHeader } from "../lib/http-range.js";
+import { createShareToken } from "../lib/auth.js";
 
 function fallbackAddedAt(stat) {
   const candidates = [stat.mtimeMs, stat.ctimeMs, stat.birthtimeMs].filter(
@@ -245,6 +246,7 @@ export function registerVideoRoutes(app, deps) {
         async (video) => ({
           ...video,
           hasSprites: await fileExists(path.join(SPRITES_DIR, video.id, "sprite.jpg")),
+          shareToken: createShareToken(video.id),
         })
       );
 
@@ -307,6 +309,7 @@ export function registerVideoRoutes(app, deps) {
       addedAt: libraryStore.getVideo(id)?.addedAt || stats.ctime,
       modifiedAt: stats.mtime,
       duration,
+      shareToken: createShareToken(id),
       ...metadata,
     };
   });

@@ -18,7 +18,7 @@ import { registerFileRoutes } from "./routes/files.js";
 import { registerDownloadRoutes } from "./routes/downloads.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { createDownloadService } from "./lib/download-service.js";
-import { AUTH_COOKIE, parseCookies, verifyToken } from "./lib/auth.js";
+import { AUTH_COOKIE, parseCookies, verifyToken, verifyShareToken } from "./lib/auth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = Fastify({ logger: false, routerOptions: { maxParamLength: 500 } });
@@ -133,9 +133,27 @@ function isProtectedPath(url: string): boolean {
   return p.startsWith("/api/") || p.startsWith("/ws/") || p.startsWith("/terminal");
 }
 
+// A valid per-video share token grants cookie-free access to just that video's
+// stream, so "Copy Link" URLs play/download for people without the password.
+function hasValidStreamShareToken(url: string): boolean {
+  const [pathname, queryString = ""] = url.split("?");
+  if (!pathname.startsWith("/api/stream/")) return false;
+  const rawId = pathname.slice("/api/stream/".length);
+  if (!rawId) return false;
+  let id: string;
+  try {
+    id = decodeURIComponent(rawId);
+  } catch {
+    id = rawId;
+  }
+  const token = new URLSearchParams(queryString).get("token");
+  return verifyShareToken(id, token);
+}
+
 // Require a valid session cookie for all data, media, and terminal endpoints.
 app.addHook("onRequest", async (request, reply) => {
   if (!isProtectedPath(request.url)) return;
+  if (hasValidStreamShareToken(request.url)) return;
   const cookies = parseCookies(request.headers.cookie);
   if (!verifyToken(cookies[AUTH_COOKIE])) {
     return reply.status(401).send({ error: "Unauthorized" });

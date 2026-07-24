@@ -7,3 +7,6 @@ amp.txt
 lottie-demo/
 .codex
 data/
+.env
+.env.*
+!.env.example

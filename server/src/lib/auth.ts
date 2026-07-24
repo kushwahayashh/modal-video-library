@@ -1,10 +1,15 @@
 import crypto from "crypto";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ACCESS PASSWORD — change this value to set the site password.
-// Can also be overridden with the ACCESS_PASSWORD environment variable.
+// ACCESS PASSWORD — required. Set the site password via the ACCESS_PASSWORD
+// environment variable (see server/.env). There is no default; the server
+// refuses to start without it so it never runs with a known credential.
 // ─────────────────────────────────────────────────────────────────────────────
-export const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || "luna";
+const ACCESS_PASSWORD_ENV = process.env.ACCESS_PASSWORD;
+if (!ACCESS_PASSWORD_ENV) {
+  throw new Error("ACCESS_PASSWORD environment variable is required (set it in server/.env)");
+}
+export const ACCESS_PASSWORD: string = ACCESS_PASSWORD_ENV;
 
 export const AUTH_COOKIE = "luna_auth";
 
@@ -56,6 +61,24 @@ export function verifyToken(token: string | undefined | null): boolean {
 /** Constant-time password comparison. */
 export function checkPassword(password: unknown): boolean {
   return typeof password === "string" && safeEqual(password, ACCESS_PASSWORD);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Share tokens — grant public, cookie-free access to a SINGLE video's stream so
+// "Copy Link" produces a URL anyone can play or download. The token is a
+// deterministic signature bound to the video id, so links stay stable and never
+// expire. It only unlocks that one video's stream, not the rest of the app.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Create a share token for a specific video id. */
+export function createShareToken(videoId: string): string {
+  return sign(`share::${videoId}`);
+}
+
+/** Verify a share token matches the given video id. */
+export function verifyShareToken(videoId: string, token: string | undefined | null): boolean {
+  if (!token || !videoId) return false;
+  return safeEqual(token, createShareToken(videoId));
 }
 
 /** Parse a Cookie header into a key/value map. */
