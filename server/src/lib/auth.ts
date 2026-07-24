@@ -1,15 +1,10 @@
 import crypto from "crypto";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ACCESS PASSWORD — required. Set the site password via the ACCESS_PASSWORD
-// environment variable (see server/.env). There is no default; the server
-// refuses to start without it so it never runs with a known credential.
+// ACCESS PASSWORD — set the site password via the ACCESS_PASSWORD environment
+// variable (see server/.env). Falls back to "modal" when unset.
 // ─────────────────────────────────────────────────────────────────────────────
-const ACCESS_PASSWORD_ENV = process.env.ACCESS_PASSWORD;
-if (!ACCESS_PASSWORD_ENV) {
-  throw new Error("ACCESS_PASSWORD environment variable is required (set it in server/.env)");
-}
-export const ACCESS_PASSWORD: string = ACCESS_PASSWORD_ENV;
+export const ACCESS_PASSWORD = process.env.ACCESS_PASSWORD || "modal";
 
 export const AUTH_COOKIE = "luna_auth";
 
