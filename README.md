@@ -5,13 +5,16 @@ Self-hosted video library with a searchable UI, custom video player, and file ma
 ## Features
 
 - **Video library** — recursive scan of `DATA_DIR/videos`, searchable with paginated results
+- **Password gate** — signed session cookie protects all data, media, and terminal endpoints
 - **Video streaming** — HTTP range support for seek-friendly playback
 - **Custom video player** — keyboard shortcuts, playback speed control, edge fill toggle (`A`)
 - **Seek-preview sprites** — auto-generated sprite sheets (`sprite.jpg` + `sprite.vtt`) for thumbnail scrubbing
 - **Thumbnail management** — placeholder image upload/assignment, per-video thumbnail picker
 - **Watch progress** — persists playback position, auto-clears at 95% completion
+- **Downloads** — fetch media with yt-dlp or aria2c, with live progress and logs over WebSocket
 - **File manager** — browse, create, rename, download, and delete files/folders on the server
 - **In-browser terminal** — WebSocket shell with xterm.js (resizable, 256-color)
+- **Auto-refresh** — library polls a version endpoint and reloads when files change on disk
 - **SQLite storage** — all metadata (video index, thumbnails, watch progress) in a single `luna.db`
 - **Idle auto-shutdown** — Modal container stops after 2 hours of inactivity
 
@@ -20,10 +23,11 @@ Self-hosted video library with a searchable UI, custom video player, and file ma
 | Layer | Technology |
 |-------|------------|
 | Frontend | React 18, TypeScript, Vite |
-| Styling | Vanilla CSS, Space Grotesk, Tabler Icons |
+| Styling | Vanilla CSS, Varela Round, Tabler Icons |
 | Backend | Bun, Fastify 5, Fastify WebSocket |
 | Database | SQLite (WAL mode, via `bun:sqlite`) |
 | Media | ffmpeg, ffprobe |
+| Downloaders | yt-dlp, aria2c |
 | Deployment | Modal (`app.py`), Cloudflare Tunnel |
 
 ## Project layout
@@ -33,32 +37,39 @@ Self-hosted video library with a searchable UI, custom video player, and file ma
 ├── app.py                              # Modal image build + run/launch lifecycle
 ├── server/
 │   ├── src/
-│   │   ├── index.ts                    # Fastify app, hooks, placeholder/thumbnail/progress routes
+│   ├── src/
+│   │   ├── index.ts                    # Fastify app, auth hook, placeholder/thumbnail/progress routes
 │   │   ├── routes/
 │   │   │   ├── videos.ts              # Video CRUD, search, rename, delete, streaming
 │   │   │   ├── sprites.ts            # Sprite generation + serving
 │   │   │   ├── files.ts              # File manager (list, mkdir, rename, delete, download, info)
+│   │   │   ├── downloads.ts          # Download jobs + WebSocket progress stream
+│   │   │   ├── auth.ts               # Login, logout, session check
 │   │   │   └── terminal.ts           # WebSocket terminal (PTY shell)
 │   │   └── lib/
 │   │       ├── sqlite-store.ts        # SQLite schema, prepared statements, transactions
 │   │       ├── video-utils.ts         # ffprobe/ffmpeg helpers, base64url encoding, path safety
 │   │       ├── sprite-generation.ts   # Sprite sheet extraction + VTT generation
+│   │       ├── download-service.ts    # yt-dlp/aria2c job lifecycle, log buffer, event emitter
+│   │       ├── auth.ts               # Token signing/verification, cookie helpers
 │   │       ├── http-range.ts          # HTTP Range header parsing
 │   │       └── files.ts              # fileExists, formatBytes utilities
-│   └── tests/                          # Contract + unit tests (7 files, 12 tests)
 ├── client/
 │   ├── src/
 │   │   ├── App.tsx                     # Main page — library + file manager views
 │   │   ├── index.css                   # Design tokens (dark monochrome palette)
 │   │   ├── components/
 │   │   │   ├── video-library/         # VideoCard, VirtualizedVideoGrid, CustomVideoPlayer,
-│   │   │   │                            ContextMenu, VideoActionModal, VideoPlayerModal,
-│   │   │   │                            ThumbnailBrowserModal, ProcessesModal
+│   │   │   │                            ContextMenu, PlayerContextMenu, VideoActionModal,
+│   │   │   │                            VideoPlayerModal, StreamModal, ThumbnailBrowserModal,
+│   │   │   │                            ProcessesModal
 │   │   │   ├── file-manager/          # FileManager (full CRUD file browser)
+│   │   │   ├── downloads/            # DownloadsPage (job list, progress, logs)
+│   │   │   ├── PasswordGate.tsx      # Login screen shown until authenticated
 │   │   │   └── ui/                    # Button, Sonner (toast notifications)
 │   │   ├── hooks/                      # useVideoLibraryData, useVideoPlayer, useVideoActions,
 │   │   │                                useSpriteProgress, useContextMenuState, useActionModal,
-│   │   │                                useDialogFocusTrap
+│   │   │                                useDialogFocusTrap, useDownloads
 │   │   └── lib/utils.ts
 │   └── dist/                           # Production build output
 └── images/                             # Default placeholder images
@@ -113,12 +124,26 @@ $DATA_DIR/
 
 ## API reference
 
+All endpoints under `/api/`, `/ws/`, and `/terminal` require a valid session cookie and
+return `401` without one. The exceptions — reachable unauthenticated — are `/api/auth/*`,
+`/api/health`, `/api/runtime/status`, `/api/cf-url`, and `/cf`. Static client assets are
+served freely so the password gate can render.
+
+### Auth
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/auth/login` | Log in (`{ password }`), sets session cookie |
+| `POST` | `/api/auth/logout` | Clear the session cookie |
+| `GET` | `/api/auth/check` | Whether the current cookie is valid |
+
 ### Videos
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/videos?q=&offset=&limit=` | List/search videos with pagination |
 | `GET` | `/api/videos/:id` | Video details + metadata |
+| `GET` | `/api/videos/version` | Library fingerprint — changes when files change on disk |
 | `POST` | `/api/videos/:id/rename` | Rename video (`{ newName }`) |
 | `DELETE` | `/api/videos/:id` | Delete video + sprites + metadata |
 | `GET` | `/api/videos/:id/progress` | Get watch progress |
@@ -157,6 +182,22 @@ $DATA_DIR/
 | `GET` | `/api/files/download?path=` | Download a file |
 | `GET` | `/api/files/info?path=` | File/folder properties |
 
+### Downloads
+
+Jobs run yt-dlp or aria2c into `DATA_DIR/videos` and are held in memory, so they do not
+survive a restart. Each job keeps a rolling buffer of the last 800 log lines.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/downloads` | List all jobs |
+| `GET` | `/api/downloads/:id` | Single job status |
+| `GET` | `/api/downloads/:id/logs` | Buffered job logs |
+| `POST` | `/api/downloads/info` | Probe a URL without downloading (`{ url, tool, extraArgs }`) |
+| `POST` | `/api/downloads` | Start a job (`{ url, tool, format, filename, subdir, ... }`) |
+| `DELETE` | `/api/downloads/:id` | Cancel an active job, or remove a finished one (`?force=1` to do both) |
+| `POST` | `/api/downloads/clear` | Remove all finished jobs |
+| `GET` | `/ws/downloads` | WebSocket — snapshot on connect, then live progress and log events |
+
 ### System
 
 | Method | Endpoint | Description |
@@ -173,17 +214,17 @@ $DATA_DIR/
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `ACCESS_PASSWORD` | `modal` | Site password. Set this before exposing the app publicly |
+| `AUTH_SECRET` | derived from password | Explicit signing secret for session tokens |
 | `DATA_DIR` | `/data` | Root for videos, sprites, thumbnails, and `luna.db` |
 | `PLACEHOLDERS_DIR` | `$DATA_DIR/thumbnails` | Placeholder image directory |
 | `VIDEO_SCAN_CONCURRENCY` | `6` | Concurrent workers for video scanning (max 16) |
 | `PORT` | `3000` | Backend listen port |
 | `SHELL` | `/bin/bash` | Shell for WebSocket terminal |
-| `NO_AUTO_LISTEN` | — | Set to `1` to skip `listen()` (for tests) |
+| `NO_AUTO_LISTEN` | — | Set to `1` to import the app without calling `listen()` |
+
+Server variables can also be set in `server/.env` — see `server/.env.example`.
 
 ## Testing
 
-```bash
-cd server && bun run test
-```
-
-Runs 12 tests across 7 files — contract tests against the Fastify app and unit tests for HTTP range parsing.
+No test suite at present.

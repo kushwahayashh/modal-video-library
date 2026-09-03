@@ -365,6 +365,9 @@ def run():
                         active_jobs = int(
                             runtime_status.get("activeSpriteJobs", 0) or 0
                         )
+                        active_downloads = int(
+                            runtime_status.get("activeDownloads", 0) or 0
+                        )
                         last_activity_ms = runtime_status.get("lastActivityAt")
                         last_activity_ts = (
                             float(last_activity_ms) / 1000.0
@@ -376,6 +379,7 @@ def run():
                         if (
                             terminal_count <= 0
                             and active_jobs <= 0
+                            and active_downloads <= 0
                             and idle_for >= IDLE_TIMEOUT_SECONDS
                         ):
                             log("  Idle timeout reached (2h). Stopping app...")

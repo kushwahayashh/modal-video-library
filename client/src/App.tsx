@@ -277,38 +277,15 @@ function App() {
   const hasOpenModal = !!selectedVideo || !!actionModal || processesModalOpen || thumbBrowserOpen || streamOpen;
 
   useEffect(() => {
+    if (!hasOpenModal) return;
     const { body, documentElement } = document;
     const previousBodyOverflow = body.style.overflow;
     const previousHtmlOverflow = documentElement.style.overflow;
-    const previousBodyPaddingRight = body.style.paddingRight;
-    const previousScrollLockOffset = documentElement.style.getPropertyValue("--scroll-lock-offset");
-
-    if (hasOpenModal) {
-      const scrollbarWidth = Math.max(0, window.innerWidth - documentElement.clientWidth);
-      body.style.paddingRight = scrollbarWidth > 0 ? `${scrollbarWidth}px` : previousBodyPaddingRight;
-      documentElement.style.setProperty("--scroll-lock-offset", `${scrollbarWidth}px`);
-      body.style.overflow = "hidden";
-      documentElement.style.overflow = "hidden";
-    } else {
-      body.style.overflow = previousBodyOverflow;
-      documentElement.style.overflow = previousHtmlOverflow;
-      body.style.paddingRight = previousBodyPaddingRight;
-      if (previousScrollLockOffset) {
-        documentElement.style.setProperty("--scroll-lock-offset", previousScrollLockOffset);
-      } else {
-        documentElement.style.removeProperty("--scroll-lock-offset");
-      }
-    }
-
+    body.style.overflow = "hidden";
+    documentElement.style.overflow = "hidden";
     return () => {
       body.style.overflow = previousBodyOverflow;
       documentElement.style.overflow = previousHtmlOverflow;
-      body.style.paddingRight = previousBodyPaddingRight;
-      if (previousScrollLockOffset) {
-        documentElement.style.setProperty("--scroll-lock-offset", previousScrollLockOffset);
-      } else {
-        documentElement.style.removeProperty("--scroll-lock-offset");
-      }
     };
   }, [hasOpenModal]);
 

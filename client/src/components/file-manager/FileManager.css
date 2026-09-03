@@ -41,7 +41,7 @@
   font-size: 0.875rem;
   font-weight: 500;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 0;
   cursor: pointer;
   transition: all 0.15s ease;
   display: flex;
@@ -60,24 +60,24 @@
 
 /* ── File list ── */
 .fm-list {
-  border-radius: 4px;
+  border-radius: 0;
   overflow: hidden;
 }
 
 .fm-row {
   display: grid;
-  grid-template-columns: 1fr 120px 200px 240px;
+  grid-template-columns: 1fr 140px 220px 280px;
   align-items: center;
   padding: 0 16px;
-  height: 42px;
+  height: 52px;
   border-bottom: 1px solid var(--border);
   transition: background 0.1s ease;
 }
 
 .fm-row-header {
-  height: 40px;
+  height: 48px;
   background: var(--bg-secondary);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -100,7 +100,7 @@
 }
 
 .fm-col-size, .fm-col-modified {
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   color: var(--text-muted);
   text-align: right;
   padding-right: 16px;
@@ -117,12 +117,12 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
+  padding: 8px 12px;
   background: none;
   border: 1px solid transparent;
   color: var(--text-secondary);
-  border-radius: 4px;
-  font-size: 0.8125rem;
+  border-radius: 0;
+  font-size: 0.9375rem;
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -138,11 +138,11 @@
 }
 
 /* ── Icons ── */
-.fm-icon-folder { color: var(--text-secondary); }
-.fm-icon-file { color: var(--text-muted); }
+.fm-icon-folder { color: var(--text-secondary); flex-shrink: 0; }
+.fm-icon-file { color: var(--text-muted); flex-shrink: 0; }
 
 .fm-name {
-  font-size: 0.875rem;
+  font-size: 1rem;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -156,9 +156,9 @@
   padding: 4px 8px;
   background: var(--bg-tertiary);
   border: none;
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--text-primary);
-  font-size: 0.875rem;
+  font-size: 1rem;
   font-family: inherit;
   outline: none;
 }
@@ -172,9 +172,9 @@
 .fm-row-skeleton { pointer-events: none; }
 
 .fm-skeleton-bar {
-  height: 14px;
+  height: 16px;
   background: var(--bg-tertiary);
-  border-radius: 4px;
+  border-radius: 0;
   animation: fmPulse 1.5s ease-in-out infinite;
 }
 
@@ -202,7 +202,7 @@
   background: var(--bg-card);
   color: var(--text-secondary);
   border: none;
-  border-radius: 4px;
+  border-radius: 0;
   font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
@@ -234,7 +234,7 @@
   width: 100%;
   max-width: 420px;
   background: var(--bg-secondary);
-  border-radius: 4px;
+  border-radius: 0;
   padding: 24px;
   animation: fmModalIn 0.2s ease;
 }
@@ -276,7 +276,7 @@
   font-size: 0.875rem;
   font-weight: 500;
   border: none;
-  border-radius: 4px;
+  border-radius: 0;
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease, opacity 0.2s ease;
 }
@@ -352,5 +352,5 @@
   min-width: 0;
   overflow: hidden;
   line-height: 1;
-  font-family: 'Space Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
 }

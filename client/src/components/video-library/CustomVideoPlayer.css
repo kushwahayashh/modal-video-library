@@ -81,22 +81,61 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(
-    180deg,
-    rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0.4) 34%,
-    rgba(0, 0, 0, 0.95) 100%
-  );
+  z-index: 1;
   padding: 26px 20px 16px;
   opacity: 0;
-  transition: opacity 0.25s ease;
+  transform: translateY(14px);
+  animation: vp-controls-out 0.3s ease both;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
+.vp-controls::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -160px;
+  bottom: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.2) 28%,
+    rgba(0, 0, 0, 0.55) 55%,
+    rgba(0, 0, 0, 0.9) 82%,
+    rgba(0, 0, 0, 1) 100%
+  );
+}
+
 .vp-controls-visible {
   opacity: 1;
+  transform: translateY(0);
+  animation: vp-controls-in 0.35s ease both;
+}
+
+@keyframes vp-controls-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes vp-controls-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(14px);
+  }
 }
 
 /* Progress area */
@@ -116,7 +155,7 @@
   width: 100%;
   height: 6px;
   background: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
+  border-radius: 0;
   overflow: visible;
   transition: height 0.15s ease;
 }
@@ -131,7 +170,7 @@
   left: 0;
   height: 100%;
   background: rgba(255, 255, 255, 0.15);
-  border-radius: 2px;
+  border-radius: 0;
 }
 
 .vp-progress-played {
@@ -140,27 +179,12 @@
   left: 0;
   height: 100%;
   background: var(--text-primary);
-  border-radius: 2px;
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
 }
 
-.vp-progress-knob {
-  position: absolute;
-  right: -7px;
-  top: 50%;
-  transform: translateY(-50%) scale(0);
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--text-primary);
-  transition: transform 0.15s ease;
-}
-
-.vp-progress-area:hover .vp-progress-knob {
-  transform: translateY(-50%) scale(1);
-}
 
 /* Sprite preview tooltip */
 .vp-sprite-preview {
@@ -183,7 +207,7 @@
 
 .vp-sprite-thumb-wrap {
   position: relative;
-  border-radius: 4px;
+  border-radius: 0;
   overflow: hidden;
   background: rgba(0, 0, 0, 0.32);
 }
@@ -202,7 +226,7 @@
   color: var(--text-primary);
   background: rgba(0, 0, 0, 0.7);
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: 0;
 }
 
 /* Controls row */
@@ -225,7 +249,7 @@
   border: none;
   color: var(--text-primary);
   padding: 9px;
-  border-radius: 4px;
+  border-radius: 0;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -292,7 +316,7 @@
   width: 100%;
   height: 5px;
   background: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
+  border-radius: 0;
   position: relative;
   transition: height 0.12s ease;
 }
@@ -308,7 +332,7 @@
 .vp-volume-fill {
   height: 100%;
   background: var(--text-primary);
-  border-radius: 2px;
+  border-radius: 0;
   position: relative;
   display: flex;
   align-items: center;
@@ -381,7 +405,7 @@
   min-width: 160px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 4px 0;
   z-index: 20;
   transform-origin: bottom right;
@@ -423,7 +447,7 @@
   padding: 5px 8px;
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--text-primary);
   font-size: 0.875rem;
   text-align: left;
@@ -464,12 +488,12 @@
   left: 10px;
   background: rgba(0, 0, 0, 0.85);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 0;
   padding: 10px;
   z-index: 20;
   min-width: 220px;
   font-size: 0.8125rem;
-  font-family: 'Space Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   color: var(--text-primary);
 }
 

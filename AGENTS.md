@@ -11,8 +11,8 @@ All UI changes must follow the app's existing design language:
   - Accent: `--accent` (#fff) — white, not colored
   - Semantic: `--danger`, `--success`, `--warning` only for their intended purposes
 - **No colored accents for informational UI** — badges, labels, and indicators use the neutral palette (text-secondary, bg-tertiary, border)
-- **Font**: Space Grotesk
-- **Border radius**: minimal (4px), no pill/rounded shapes unless it's a specific control
+- **Font**: Varela Round (UI), Space Mono (monospace)
+- **Border radius**: sharp corners (0px); only circular controls (e.g. slider knobs) use 50%
 - **Subtle, flat aesthetic** — no shadows, no gradients, no glow effects
 - **Backdrop blur** on overlays/nav only
 

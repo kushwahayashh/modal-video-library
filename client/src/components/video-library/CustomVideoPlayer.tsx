@@ -719,9 +719,7 @@ export default function CustomVideoPlayer({ videoId, hasSprites, shareToken, str
           )}
           <div className="vp-progress-bar">
             <div className="vp-progress-buffered" style={{ width: `${bufferedPercent}%` }} />
-            <div className="vp-progress-played" style={{ width: `${playedPercent}%` }}>
-              <div className="vp-progress-knob" />
-            </div>
+            <div className="vp-progress-played" style={{ width: `${playedPercent}%` }} />
           </div>
         </div>
 

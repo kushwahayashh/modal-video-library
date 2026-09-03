@@ -175,6 +175,7 @@ app.get("/api/runtime/status", async () => {
     lastActivityAt,
     terminalConnectionCount: terminalState.connectionCount,
     activeSpriteJobs,
+    activeDownloads: downloadService.countActiveJobs(),
   };
 });
 

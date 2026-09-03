@@ -72,7 +72,10 @@ export default function VideoCard({
       </div>
       <div className="video-info">
         <h3 className="video-title">{video.title}</h3>
-        <p className="video-meta">{video.size || "Unknown size"}</p>
+        <p className="video-meta">
+          <span>{video.size || "Unknown size"}</span>
+          {video.hasSprites && <span className="video-sprite-tag">SPRITE</span>}
+        </p>
       </div>
     </div>
   );

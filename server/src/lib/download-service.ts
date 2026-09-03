@@ -44,6 +44,22 @@ export function createDownloadService({ videosDir }) {
     return Array.from(jobs.values()).map(serializeJob);
   }
 
+  function countActiveJobs() {
+    let count = 0;
+    for (const job of jobs.values()) {
+      if (
+        job.status === "starting" ||
+        job.status === "queued" ||
+        job.status === "downloading" ||
+        job.status === "merging" ||
+        job.status === "cancelling"
+      ) {
+        count++;
+      }
+    }
+    return count;
+  }
+
   function getJob(id) {
     const job = jobs.get(id);
     return job ? serializeJob(job) : null;
@@ -503,6 +519,7 @@ export function createDownloadService({ videosDir }) {
     removeJob,
     clearFinished,
     listJobs,
+    countActiveJobs,
     getJob,
     getLogs,
     subscribe,

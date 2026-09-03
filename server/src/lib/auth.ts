@@ -59,10 +59,9 @@ export function checkPassword(password: unknown): boolean {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Share tokens — grant public, cookie-free access to a SINGLE video's stream so
-// "Copy Link" produces a URL anyone can play or download. The token is a
-// deterministic signature bound to the video id, so links stay stable and never
-// expire. It only unlocks that one video's stream, not the rest of the app.
+// Share tokens — a deterministic signature bound to a video id. A valid token
+// in a stream URL bypasses the session cookie check so that "Copy Link" URLs
+// play/download for anyone who has the link, without needing the site password.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Create a share token for a specific video id. */

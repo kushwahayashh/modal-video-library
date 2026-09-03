@@ -1,13 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
 import { toast } from "sonner";
 import {
-  IconFolderFilled,
-  IconFileFilled,
-  IconLoader,
-  IconFolderPlus,
   IconSignature,
   IconTrash,
   IconFolderOpen,
+  IconFileBroken,
   IconDownload,
   IconAlertSquareRoundedFilled,
   IconTrashFilled,
@@ -370,7 +367,7 @@ export default function FileManager({ onBack }: { onBack?: () => void } = {}) {
               onClick={() => fetchFiles(currentPath)}
               title="Refresh"
             >
-              <IconLoader size={18} />
+              Refresh
             </button>
             <button
               type="button"
@@ -380,7 +377,6 @@ export default function FileManager({ onBack }: { onBack?: () => void } = {}) {
                 setNewFolderName("");
               }}
             >
-              <IconFolderPlus size={18} />
               New Folder
             </button>
             <a
@@ -452,7 +448,7 @@ export default function FileManager({ onBack }: { onBack?: () => void } = {}) {
                   onClick={() => navigateTo(parentPath)}
                 >
                   <div className="fm-col-name">
-                    <IconFolderFilled size={22} className="fm-icon-folder" />
+                    <IconFolderOpen size={26} className="fm-icon-folder" />
                     <span className="fm-name">..</span>
                   </div>
                   <div className="fm-col-size">—</div>
@@ -463,7 +459,7 @@ export default function FileManager({ onBack }: { onBack?: () => void } = {}) {
               {creatingFolder && (
                 <div className="fm-row fm-row-item fm-row-new-folder">
                   <div className="fm-col-name">
-                    <IconFolderFilled size={22} className="fm-icon-folder" />
+                    <IconFolderOpen size={26} className="fm-icon-folder" />
                     <input
                       ref={newFolderInputRef}
                       className="fm-inline-input new-folder"
@@ -493,7 +489,7 @@ export default function FileManager({ onBack }: { onBack?: () => void } = {}) {
               )}
 
               {items.map((item, idx) => {
-                const Icon = item.isDirectory ? IconFolderFilled : IconFileFilled;
+                const Icon = item.isDirectory ? IconFolderOpen : IconFileBroken;
                 const iconClass = item.isDirectory ? "fm-icon-folder" : "fm-icon-file";
 
                 return (
@@ -506,7 +502,7 @@ export default function FileManager({ onBack }: { onBack?: () => void } = {}) {
                     onContextMenu={(e) => openCtxMenu(e, item)}
                   >
                     <div className="fm-col-name">
-                      <Icon size={22} className={iconClass} />
+                      <Icon size={26} className={iconClass} />
                       {renamingPath === item.path ? (
                         <input
                           ref={renameInputRef}

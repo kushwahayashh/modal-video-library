@@ -6,7 +6,7 @@
   max-width: calc(100vw - 16px);
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 0;
   padding: 4px 0;
   transform-origin: top left;
   animation: contextMenuEnter 0.14s ease-out;
@@ -55,7 +55,7 @@
   padding: 5px 8px;
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: 0;
   color: var(--text-primary);
   font-size: 0.875rem;
   text-align: left;

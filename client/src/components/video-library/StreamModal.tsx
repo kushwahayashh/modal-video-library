@@ -1,7 +1,7 @@
 import "./VideoPlayerModal.css";
 import "./StreamModal.css";
-import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { IconPlayerPlayFilled, IconLink, IconX } from "@tabler/icons-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { IconPlayerPlayFilled, IconLink } from "@tabler/icons-react";
 import { useDialogFocusTrap } from "../../hooks/useDialogFocusTrap";
 import CustomVideoPlayer from "./CustomVideoPlayer";
 
@@ -25,7 +25,6 @@ function isLikelyValidUrl(value: string): boolean {
 export default function StreamModal({ open, visible, onClose }: StreamModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const titleId = useId();
   const [url, setUrl] = useState("");
   const [streamSrc, setStreamSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -66,17 +65,10 @@ export default function StreamModal({ open, visible, onClose }: StreamModalProps
         className="modal-box stream-modal-box"
         role="dialog"
         aria-modal="true"
-        aria-labelledby={titleId}
+        aria-label="Stream from URL"
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="modal-header">
-          <span id={titleId}>Stream from URL</span>
-          <button type="button" className="stream-close-btn" onClick={onClose} aria-label="Close">
-            <IconX size={18} />
-          </button>
-        </div>
-
         <form className="stream-form" onSubmit={handleSubmit}>
           <div className="stream-input-wrap">
             <IconLink size={18} className="stream-input-icon" aria-hidden="true" />
