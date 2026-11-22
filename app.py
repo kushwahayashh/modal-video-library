@@ -34,7 +34,8 @@ image = (
         # Install Node.js + npm
         "curl -fsSL https://deb.nodesource.com/setup_22.x | bash -",
         "apt-get install -y nodejs",
-        "npm i -g @openai/codex @qwen-code/qwen-code @sourcegraph/amp @mariozechner/pi-coding-agent",
+        # Install opencode (AI coding agent, used via terminal)
+        "npm i -g opencode-ai",
         # Install Bun
         "curl -fsSL https://bun.sh/install | bash",
         "ln -s /root/.bun/bin/bun /usr/local/bin/bun",
@@ -72,13 +73,15 @@ image = (
     )
     .add_local_file("redirect.html", "/app/redirect.html", copy=True)
     # Add source code (changes here won't re-run npm install)
-    .add_local_dir("server/src", remote_path="/app/server/src")
-    .add_local_dir("client/src", remote_path="/app/client/src")
+    .add_local_dir("server/src", remote_path="/app/server/src", copy=True)
+    .add_local_dir("client/src", remote_path="/app/client/src", copy=True)
+    # Build client once at image build time so container startup is fast
+    .run_commands("cd /app/client && bun run build")
 )
 
 app = modal.App(APP_NAME, image=image)
 
-# Store runtime state and cloudflare URL
+# Store runtime state and tunnel URL
 cf_url_store = modal.Dict.from_name("cf-url-store", create_if_missing=True)
 
 
@@ -146,8 +149,7 @@ def _tunnel_redirect_page(tunnel_url: str, poll_url: str):
 @app.function(
     timeout=86400,
     volumes={"/data": volume},
-    env={"HOME": "/data/.home", "PI_OFFLINE": "1"},
-    secrets=[modal.Secret.from_name("gemini-key")],
+    env={"HOME": "/data/.home"},
 )
 def run():
     import re
@@ -235,10 +237,22 @@ def run():
             return
         cf_state["posted"] = post_cf_url(cf_state["url"])
 
-    # Start tunnel
+    # Start tunnel + server in parallel (was sequential before)
     log("  Starting tunnel...")
+    log("  Starting server...")
     cf_proc = subprocess.Popen(
-        ["cloudflared", "tunnel", "--url", f"http://localhost:{SERVER_PORT}"],
+        ["cloudflared", "--no-autoupdate", "tunnel", "--protocol", "quic",
+         "--url", f"http://localhost:{SERVER_PORT}"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        bufsize=1,
+    )
+
+    # Server starts immediately alongside tunnel (client pre-built in image)
+    server_proc = subprocess.Popen(
+        ["bun", "run", "start"],
+        cwd=f"{APP_ROOT}/server",
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
@@ -252,14 +266,14 @@ def run():
             if match and not url_found:
                 url_found = True
                 cf_url = match.group(0)
-                log(f"  Starting tunnel... \033[32mdone\033[0m")
+                log("  Starting tunnel... \033[32mdone\033[0m")
                 log(f"\n  \033[1mPublic URL:\033[0m \033[36m{cf_url}\033[0m\n")
                 cf_url_store["url"] = cf_url
                 cf_state["url"] = cf_url
                 tunnel_ready.set()
                 maybe_post_cf_url()
         if not url_found:
-            log(f"  Starting tunnel... \033[31mfailed\033[0m")
+            log("  Starting tunnel... \033[31mfailed\033[0m")
             tunnel_ready.set()
 
     capture_thread = threading.Thread(
@@ -267,74 +281,45 @@ def run():
     )
     capture_thread.start()
 
-    # Build client in parallel with tunnel startup
-    build_done = threading.Event()
-    build_error = {"err": None, "stderr": None}
+    server_health = {"ok": None}
 
-    def build_client():
-        try:
-            result = subprocess.run(
-                ["bun", "run", "build"],
-                cwd=f"{APP_ROOT}/client",
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            if result.stderr:
-                build_error["stderr"] = result.stderr
-        except subprocess.CalledProcessError as e:
-            build_error["err"] = e
-            build_error["stderr"] = e.stderr or e.stdout
-        except Exception as e:
-            build_error["err"] = e
-        finally:
-            build_done.set()
+    def check_server_health():
+        server_health["ok"] = wait_for_health(HEALTH_URL, timeout=30, interval=0.2)
+        if server_health["ok"]:
+            log("  Starting server... \033[32mdone\033[0m")
+            server_ready.set()
+            maybe_post_cf_url()
+        else:
+            log("  Starting server... \033[31mfailed\033[0m")
 
-    build_thread = threading.Thread(target=build_client, daemon=True)
-    build_thread.start()
+    health_thread = threading.Thread(target=check_server_health, daemon=True)
+    health_thread.start()
 
-    # Wait for tunnel URL first (up to 15s)
-    tunnel_deadline = time.time() + 15
-    while time.time() < tunnel_deadline and not tunnel_ready.is_set():
+    # Wait for both (up to 30s); heartbeat while waiting
+    startup_deadline = time.time() + 30
+    while time.time() < startup_deadline:
+        if tunnel_ready.is_set() and server_ready.is_set():
+            break
+        if cf_proc.poll() is not None and not tunnel_ready.is_set():
+            tunnel_ready.set()
         cf_url_store["heartbeat"] = time.time()
         tunnel_ready.wait(timeout=1)
+        if tunnel_ready.is_set() and server_ready.is_set():
+            break
+        if not health_thread.is_alive() and server_health["ok"] is False:
+            break
 
-    # Then wait for build to finish
-    while not build_done.is_set():
-        cf_url_store["heartbeat"] = time.time()
-        build_done.wait(timeout=1)
-
-    if build_error["err"]:
-        log(f"  Building client... \033[31mfailed\033[0m")
-        if build_error["stderr"]:
-            log(build_error["stderr"].rstrip())
-        raise build_error["err"]
-
-    log(f"  Building client... \033[32mdone\033[0m")
-
-    # Start server
-    log("  Starting server...")
-    server_proc = subprocess.Popen(
-        ["bun", "run", "start"],
-        cwd=f"{APP_ROOT}/server",
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-    )
-
-    if wait_for_health(HEALTH_URL, timeout=30):
-        log(f"  Starting server... \033[32mdone\033[0m")
-        cf_url_store["status"] = "running"
-        cf_url_store["heartbeat"] = time.time()
-        cf_url_store.pop("launching", None)
-        server_ready.set()
-        maybe_post_cf_url()
-    else:
-        log(f"  Starting server... \033[31mfailed\033[0m")
+    if not server_ready.is_set():
+        log("  Starting server... \033[31mfailed\033[0m")
+        terminate_process(server_proc)
+        terminate_process(cf_proc)
         cf_url_store["status"] = "failed"
         cf_url_store.pop("launching", None)
         raise RuntimeError("Server did not become healthy in time.")
+
+    cf_url_store["status"] = "running"
+    cf_url_store["heartbeat"] = time.time()
+    cf_url_store.pop("launching", None)
 
     def pipe_server_output():
         for line in server_proc.stdout:
@@ -365,9 +350,6 @@ def run():
                         active_jobs = int(
                             runtime_status.get("activeSpriteJobs", 0) or 0
                         )
-                        active_downloads = int(
-                            runtime_status.get("activeDownloads", 0) or 0
-                        )
                         last_activity_ms = runtime_status.get("lastActivityAt")
                         last_activity_ts = (
                             float(last_activity_ms) / 1000.0
@@ -379,7 +361,6 @@ def run():
                         if (
                             terminal_count <= 0
                             and active_jobs <= 0
-                            and active_downloads <= 0
                             and idle_for >= IDLE_TIMEOUT_SECONDS
                         ):
                             log("  Idle timeout reached (2h). Stopping app...")
@@ -388,7 +369,7 @@ def run():
                     # Keep running if status probe fails temporarily.
                     pass
 
-            time.sleep(1)
+            time.sleep(5)
     finally:
         terminate_process(server_proc)
         terminate_process(cf_proc)
@@ -401,7 +382,7 @@ def run():
 @app.function()
 @modal.fastapi_endpoint(method="GET")
 def launch(fmt: str = ""):
-    """Auto-start run() if needed, then redirect to the Cloudflare tunnel URL.
+    """Auto-start run() if needed, then redirect to the tunnel URL.
     Append ?fmt=json to poll status without the HTML page."""
     from fastapi.responses import JSONResponse
 

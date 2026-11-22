@@ -33,7 +33,7 @@
   max-width: 420px;
   background: var(--bg-secondary);
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-lg);
   padding: 24px;
   animation: slideUp 0.2s ease;
 }
@@ -89,7 +89,7 @@
   padding: 10px 14px;
   background: var(--bg-tertiary);
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: 0.875rem;
   margin-bottom: 20px;
@@ -130,7 +130,7 @@
   font-size: 0.875rem;
   font-weight: 500;
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease, opacity 0.2s ease;
 }
@@ -180,7 +180,7 @@
 
 /* Properties Modal */
 .action-modal.properties-modal {
-  max-width: 480px;
+  max-width: 600px;
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -192,7 +192,7 @@
 }
 
 .prop-label {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
@@ -200,7 +200,7 @@
 }
 
 .prop-title {
-  font-size: 0.9375rem;
+  font-size: 1.0625rem;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-primary);
@@ -244,11 +244,11 @@
   min-width: 0;
   background: var(--bg-tertiary);
   padding: 10px 12px;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
 }
 
 .prop-section-title {
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
@@ -261,7 +261,7 @@
   color: var(--text-muted);
   padding: 10px 12px;
   background: var(--bg-tertiary);
-  border-radius: 0;
+  border-radius: var(--radius-sm);
 }
 
 .prop-row,
@@ -278,12 +278,12 @@
 }
 
 .prop-row-label {
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   color: var(--text-muted);
 }
 
 .prop-row-value {
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   color: var(--text-secondary);
   text-align: right;
   word-break: break-word;
@@ -322,7 +322,7 @@
   width: 100%;
   background: transparent;
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   overflow: hidden;
   padding: 0;
@@ -348,7 +348,7 @@
 
 .thumbnail-picker-item.skeleton {
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   background: var(--bg-tertiary);
 }
 
@@ -427,7 +427,7 @@
   grid-column: 1 / -1;
   padding: 16px 12px;
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   background: var(--bg-tertiary);
   color: var(--text-muted);
   font-size: 0.8125rem;

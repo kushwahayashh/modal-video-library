@@ -9,6 +9,4 @@ export interface Video {
   thumbnail: string | null;
   duration: string | null;
   hasSprites?: boolean;
-  /** Signed token that makes this video's stream URL shareable without the password. */
-  shareToken?: string;
 }

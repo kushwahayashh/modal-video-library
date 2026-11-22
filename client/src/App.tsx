@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback, type MouseEvent } from "react";
-import { IconSearch, IconSearchOff, IconCircleXFilled, IconFolderOpenFilled } from "@tabler/icons-react";
 import "./App.css";
 import type { Video } from "./types";
 import { buildStreamUrl } from "./utils";
@@ -12,12 +11,10 @@ import { toast } from "sonner";
 import ContextMenu from "./components/video-library/ContextMenu";
 import VirtualizedVideoGrid from "./components/video-library/VirtualizedVideoGrid";
 import VideoPlayerModal from "./components/video-library/VideoPlayerModal";
-import StreamModal from "./components/video-library/StreamModal";
 import VideoActionModal from "./components/video-library/VideoActionModal";
 import ProcessesModal from "./components/video-library/ProcessesModal";
-import ThumbnailBrowserModal from "./components/video-library/ThumbnailBrowserModal";
 import FileManager from "./components/file-manager/FileManager";
-import DownloadsPage from "./components/downloads/DownloadsPage";
+import { IconLogoMark, IconSearchFlame, IconFolder, IconTerminalConsole, IconCloseCircle, IconFolderOpen, IconMagnifier } from "./components/video-library/solar-icons";
 
 function App() {
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
@@ -25,13 +22,7 @@ function App() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [processesModalOpen, setProcessesModalOpen] = useState(false);
-  const [streamOpen, setStreamOpen] = useState(false);
-  const [streamVisible, setStreamVisible] = useState(false);
-  const streamCloseTimerRef = useRef<number | null>(null);
-  const [thumbBrowserOpen, setThumbBrowserOpen] = useState(false);
-  const [thumbBrowserClosing, setThumbBrowserClosing] = useState(false);
   const [fileManagerOpen, setFileManagerOpen] = useState(() => window.location.pathname === "/files");
-  const [downloadsOpen, setDownloadsOpen] = useState(() => window.location.pathname === "/downloads");
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [watchProgress, setWatchProgress] = useState<Record<string, { currentTime: number; duration: number }>>({});
   const closeTimerRef = useRef<number | null>(null);
@@ -90,17 +81,16 @@ function App() {
   }, [search]);
 
   useEffect(() => {
-    document.title = downloadsOpen ? "Downloads" : fileManagerOpen ? "Files" : "Video Library";
-    const targetPath = downloadsOpen ? "/downloads" : fileManagerOpen ? "/files" : "/";
+    document.title = fileManagerOpen ? "Files" : "Video Library";
+    const targetPath = fileManagerOpen ? "/files" : "/";
     if (window.location.pathname !== targetPath) {
-      window.history.pushState({ fileManager: fileManagerOpen, downloads: downloadsOpen }, "", targetPath);
+      window.history.pushState({ fileManager: fileManagerOpen }, "", targetPath);
     }
-  }, [fileManagerOpen, downloadsOpen]);
+  }, [fileManagerOpen]);
 
   useEffect(() => {
     const onPopState = () => {
       setFileManagerOpen(window.location.pathname === "/files");
-      setDownloadsOpen(window.location.pathname === "/downloads");
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -142,7 +132,7 @@ function App() {
     let timer: number | null = null;
 
     const checkLibraryVersion = async () => {
-      if (!active || fileManagerOpen || downloadsOpen) return;
+      if (!active || fileManagerOpen) return;
       try {
         const res = await fetch("/api/videos/version");
         if (!res.ok) return;
@@ -176,7 +166,7 @@ function App() {
       window.removeEventListener("focus", checkLibraryVersion);
       document.removeEventListener("visibilitychange", checkLibraryVersion);
     };
-  }, [downloadsOpen, fetchVideos, fetchWatchProgress, fileManagerOpen]);
+  }, [fetchVideos, fetchWatchProgress, fileManagerOpen]);
 
   useEffect(() => {
     if (processesModalOpen && activeSpriteJobs.length === 0) {
@@ -219,38 +209,16 @@ function App() {
     }, 300);
   }, [fetchWatchProgress]);
 
-  const openStream = useCallback(() => {
-    if (streamCloseTimerRef.current !== null) {
-      window.clearTimeout(streamCloseTimerRef.current);
-      streamCloseTimerRef.current = null;
-    }
-    setStreamOpen(true);
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => setStreamVisible(true));
-    });
-  }, []);
-
-  const closeStream = useCallback(() => {
-    setStreamVisible(false);
-    if (streamCloseTimerRef.current !== null) {
-      window.clearTimeout(streamCloseTimerRef.current);
-    }
-    streamCloseTimerRef.current = window.setTimeout(() => {
-      setStreamOpen(false);
-      streamCloseTimerRef.current = null;
-    }, 300);
-  }, []);
-
   const handleContextAction = (action: string, video: Video) => {
     switch (action) {
       case "play":
         openModal(video);
         break;
       case "download":
-        window.open(buildStreamUrl(video.id, { download: true, shareToken: video.shareToken }), "_blank");
+        window.open(buildStreamUrl(video.id, { download: true }), "_blank");
         break;
       case "copy-link":
-        navigator.clipboard.writeText(buildStreamUrl(video.id, { shareToken: video.shareToken, absolute: true }))
+        navigator.clipboard.writeText(buildStreamUrl(video.id, { absolute: true }))
           .then(() => toast.success("Video link copied"))
           .catch(() => toast.error("Failed to copy video link"));
         break;
@@ -274,7 +242,7 @@ function App() {
 
   const hasActiveSearch = debouncedSearch.length > 0;
   const isSearchPending = search.trim() !== debouncedSearch;
-  const hasOpenModal = !!selectedVideo || !!actionModal || processesModalOpen || thumbBrowserOpen || streamOpen;
+  const hasOpenModal = !!selectedVideo || !!actionModal || processesModalOpen;
 
   useEffect(() => {
     if (!hasOpenModal) return;
@@ -294,20 +262,13 @@ function App() {
       if (closeTimerRef.current !== null) {
         window.clearTimeout(closeTimerRef.current);
       }
-      if (streamCloseTimerRef.current !== null) {
-        window.clearTimeout(streamCloseTimerRef.current);
-      }
     };
   }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (thumbBrowserOpen) {
-          setThumbBrowserClosing(true);
-        } else if (streamOpen) {
-          closeStream();
-        } else if (processesModalOpen) {
+        if (processesModalOpen) {
           setProcessesModalOpen(false);
         } else if (actionModal) {
           closeActionModal();
@@ -324,21 +285,11 @@ function App() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedVideo, closeModal, actionModal, processesModalOpen, thumbBrowserOpen, streamOpen, closeStream, hasOpenModal]);
-
-  if (downloadsOpen) {
-    return <DownloadsPage onBack={() => setDownloadsOpen(false)} />;
-  }
+  }, [selectedVideo, closeModal, actionModal, processesModalOpen, hasOpenModal]);
 
   if (fileManagerOpen) {
     return <FileManager onBack={() => setFileManagerOpen(false)} />;
   }
-
-  const openDownloads = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (event.ctrlKey || event.metaKey || event.shiftKey) return;
-    event.preventDefault();
-    setDownloadsOpen(true);
-  };
 
   const openFiles = (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -351,16 +302,17 @@ function App() {
       <nav className="nav">
         <div className="container nav-content">
           <a className="nav-logo" href="/cf">
+            <IconLogoMark size={24} />
             VIDEO<span>LIB</span>
           </a>
 
           <div className="nav-search-wrapper">
-            <IconSearch size={20} className={`nav-search-icon${isSearchPending ? " searching" : ""}`} stroke={2.5} />
+            <IconSearchFlame size={24} className={`nav-search-icon${isSearchPending ? " searching" : ""}`} />
             <input
               ref={searchInputRef}
               type="text"
               className="nav-search"
-              placeholder="Search videos…  /"
+              placeholder="Search something filthy…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -371,7 +323,7 @@ function App() {
                 onClick={() => { setSearch(""); searchInputRef.current?.focus(); }}
                 aria-label="Clear search"
               >
-                <IconCircleXFilled size={18} />
+                <IconCloseCircle size={18} />
               </button>
             )}
 
@@ -384,11 +336,14 @@ function App() {
                 <span className="nav-process-count">{activeSpriteJobs.length}</span>
               </button>
             )}
-            <button className="nav-btn" onClick={openStream}>Stream</button>
-            <button className="nav-btn" onClick={() => setThumbBrowserOpen(true)}>Thumbnails</button>
-            <a href="/downloads" className="nav-btn nav-btn-terminal" onClick={openDownloads}>Downloads</a>
-            <a href="/files" className="nav-btn nav-btn-terminal" onClick={openFiles}>Files</a>
-            <a href="/terminal" target="_blank" rel="noopener noreferrer" className="nav-btn nav-btn-terminal">Terminal</a>
+            <a href="/files" className="nav-btn nav-btn-terminal" onClick={openFiles}>
+              <IconFolder size={18} />
+              Files
+            </a>
+            <a href="/terminal" target="_blank" rel="noopener noreferrer" className="nav-btn nav-btn-terminal">
+              <IconTerminalConsole size={18} />
+              Terminal
+            </a>
           </div>
         </div>
       </nav>
@@ -422,15 +377,15 @@ function App() {
               </div>
             ) : hasActiveSearch && videos.length === 0 ? (
               <div className="empty">
-                <IconSearchOff className="empty-icon" aria-hidden="true" />
+                <IconMagnifier className="empty-icon" aria-hidden="true" />
                 <h2>No results</h2>
                 <p>No videos match your search</p>
               </div>
             ) : videos.length === 0 ? (
               <div className="empty">
-                <IconFolderOpenFilled className="empty-icon" aria-hidden="true" />
+                <IconFolderOpen className="empty-icon" aria-hidden="true" />
                 <h2>No videos yet</h2>
-                <p>Upload or download videos to get started</p>
+                <p>Upload videos to get started</p>
               </div>
             ) : (
               <>
@@ -438,7 +393,6 @@ function App() {
                   videos={videos}
                   onVideoClick={openModal}
                   onVideoContextMenu={openContextMenu}
-                  placeholderImages={placeholderImages}
                   thumbnailOverrides={thumbnailOverrides}
                   watchProgress={watchProgress}
                   hasMore={hasMore}
@@ -461,12 +415,6 @@ function App() {
         selectedVideo={selectedVideo}
         modalVisible={modalVisible}
         onClose={closeModal}
-      />
-
-      <StreamModal
-        open={streamOpen}
-        visible={streamVisible}
-        onClose={closeStream}
       />
 
       <VideoActionModal
@@ -501,20 +449,6 @@ function App() {
         open={processesModalOpen}
         jobs={activeSpriteJobs}
         onClose={() => setProcessesModalOpen(false)}
-      />
-
-      <ThumbnailBrowserModal
-        open={thumbBrowserOpen}
-        closing={thumbBrowserClosing}
-        placeholderImages={placeholderImages}
-        placeholdersLoading={placeholdersLoading}
-        onClose={() => setThumbBrowserClosing(true)}
-        onClosed={() => {
-          setThumbBrowserOpen(false);
-          setThumbBrowserClosing(false);
-        }}
-        onPlaceholderImagesAdded={addPlaceholderImages}
-        onPlaceholderImageDeleted={removePlaceholderImage}
       />
     </div>
   );

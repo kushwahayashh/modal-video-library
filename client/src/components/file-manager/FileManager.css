@@ -15,52 +15,9 @@
   flex: 1;
 }
 
-/* ── Breadcrumbs ── */
-.fm-breadcrumb-segment {
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-}
-
-.fm-breadcrumb-sep {
-  color: var(--text-muted);
-  flex-shrink: 0;
-  margin: 0 2px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.5;
-  line-height: 1;
-  vertical-align: middle;
-}
-
-.fm-breadcrumb-btn {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-  font-weight: 500;
-  padding: 4px 8px;
-  border-radius: 0;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  display: flex;
-  align-items: center;
-}
-
-.fm-breadcrumb-btn:hover:not(:disabled) {
-  color: var(--text-primary);
-  background: var(--bg-tertiary);
-}
-
-.fm-breadcrumb-btn.active {
-  color: var(--text-primary);
-  cursor: default;
-}
-
 /* ── File list ── */
 .fm-list {
-  border-radius: 0;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -121,7 +78,7 @@
   background: none;
   border: 1px solid transparent;
   color: var(--text-secondary);
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   font-size: 0.9375rem;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -156,7 +113,7 @@
   padding: 4px 8px;
   background: var(--bg-tertiary);
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: 1rem;
   font-family: inherit;
@@ -174,7 +131,7 @@
 .fm-skeleton-bar {
   height: 16px;
   background: var(--bg-tertiary);
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   animation: fmPulse 1.5s ease-in-out infinite;
 }
 
@@ -202,7 +159,7 @@
   background: var(--bg-card);
   color: var(--text-secondary);
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
@@ -234,7 +191,7 @@
   width: 100%;
   max-width: 420px;
   background: var(--bg-secondary);
-  border-radius: 0;
+  border-radius: var(--radius-lg);
   padding: 24px;
   animation: fmModalIn 0.2s ease;
 }
@@ -276,7 +233,7 @@
   font-size: 0.875rem;
   font-weight: 500;
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.2s ease, color 0.2s ease, opacity 0.2s ease;
 }
@@ -343,14 +300,4 @@
   .fm-col-size, .fm-col-modified { display: none; }
 }
 
-/* ── Navbar Breadcrumbs ── */
-.fm-nav-breadcrumbs {
-  display: flex;
-  align-items: center;
-  margin-left: 20px;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  line-height: 1;
-  font-family: var(--font-mono);
-}
+/* ── Responsive ── */

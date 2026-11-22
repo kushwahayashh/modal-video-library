@@ -83,6 +83,11 @@ modal volume rm video-library-data /videos/unwanted-video.mp4
 - `volume.commit()` can be called to explicitly persist mid-run
 - `volume.reload()` fetches changes made by other containers
 - Multiple containers can read from the same volume concurrently
+- **Restart required after CLI upload:** files added via `modal volume put` while the
+  app is running will not appear in the library until the container restarts.
+  The Bun server cannot call `volume.reload()`, and its disk scan only sees the
+  mount state from container start. Either restart the app after bulk uploads,
+  or upload from inside (file manager / terminal) for immediate visibility.
 
 ## Container image — what's installed
 
@@ -147,19 +152,20 @@ state = {
 
 ## Secrets
 
-API keys are stored as Modal Secrets and injected as environment variables:
+No secrets are currently attached to the app. If a future feature needs API keys,
+store them as Modal Secrets and inject as environment variables:
 
 ```python
-@app.function(secrets=[modal.Secret.from_name("gemini-key")])
+@app.function(secrets=[modal.Secret.from_name("my-key")])
 def run():
-    key = os.environ["GEMINI_API_KEY"]  # Available as env var
+    key = os.environ["MY_API_KEY"]  # Available as env var
 ```
 
 **Managing secrets:**
 
 ```bash
 # Create a secret
-modal secret create gemini-key GEMINI_API_KEY=sk-...
+modal secret create my-key MY_API_KEY=sk-...
 
 # Or create via the Modal dashboard at https://modal.com/secrets
 ```
@@ -258,7 +264,9 @@ modal volume rm video-library-data /sprites
 ## Architecture notes
 
 - **No direct ingress** — Modal functions don't expose ports directly. LUNA uses a Cloudflare quick tunnel (`cloudflared tunnel --url http://localhost:3000`) to make the Fastify server publicly accessible.
-- **Client build happens at runtime** — the Vite build runs inside the container on every start (not during image build) so that source code changes take effect without rebuilding the image layer.
+- **Client build happens at image build time** — the Vite build runs once during `modal build/deploy`
+  so container startup only starts the tunnel + server. Source changes rebuild just that layer
+  (`bun install` stays cached).
 - **Image layering is optimized** — `package.json` files are added before source code, so `bun install` is cached and only re-runs when dependencies change.
 - **`launch()` is a FastAPI endpoint** — decorated with `@modal.fastapi_endpoint()`, it gets a stable Modal-hosted URL. This is the "front door" that auto-starts the container and redirects to the tunnel.
 - **`run()` is a regular function** — it runs as a long-lived container (up to 24h) managing the server, tunnel, and idle watchdog as subprocesses/threads.

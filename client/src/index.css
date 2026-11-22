@@ -4,7 +4,7 @@
   --bg-primary: #131313;
   --bg-secondary: #1c1c1c;
   --bg-tertiary: #252525;
-  --bg-card: #202020;
+  --bg-card: #232323;
   --bg-card-hover: #2c2c2c;
   --text-primary: #fff;
   --text-secondary: #b3b3b3;
@@ -25,6 +25,12 @@
   --shadow-medium: none;
   --font-sans: 'Varela Round', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'Space Mono', ui-monospace, Menlo, Consolas, monospace;
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 22px;
+  --radius-full: 999px;
 }
 
 * {
@@ -80,91 +86,9 @@ select {
 
 ::-webkit-scrollbar-thumb {
   background: var(--border);
-  border-radius: 0;
+  border-radius: var(--radius-full);
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
-}
-
-.pw-gate {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-primary);
-  z-index: 9999;
-}
-
-.pw-term {
-  width: 100%;
-  max-width: 760px;
-  padding: 48px;
-  font-family: var(--font-mono);
-  cursor: text;
-}
-
-.pw-line {
-  font-size: 26px;
-  line-height: 1.7;
-  letter-spacing: 0.5px;
-  color: var(--text-primary);
-  word-break: break-word;
-}
-
-.pw-dim {
-  color: var(--text-muted);
-}
-
-.pw-spacer {
-  height: 24px;
-}
-
-.pw-input-line {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-}
-
-.pw-prompt {
-  color: var(--text-secondary);
-  margin-right: 14px;
-  white-space: nowrap;
-}
-
-.pw-typed {
-  color: var(--text-primary);
-  display: inline-flex;
-  align-items: baseline;
-  letter-spacing: 4px;
-  min-height: 1.2em;
-}
-
-.pw-cursor {
-  display: inline-block;
-  width: 14px;
-  height: 1.1em;
-  background: var(--text-primary);
-  margin-left: 2px;
-  transform: translateY(2px);
-  animation: pw-blink 1.1s steps(1) infinite;
-}
-
-@keyframes pw-blink {
-  0%, 50% { opacity: 1; }
-  50.01%, 100% { opacity: 0; }
-}
-
-.pw-hidden-input {
-  position: absolute;
-  opacity: 0;
-  width: 1px;
-  height: 1px;
-  pointer-events: none;
-}
-
-.pw-err {
-  color: var(--danger);
-  margin-top: 24px;
 }

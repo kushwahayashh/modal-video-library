@@ -15,10 +15,6 @@ import { registerVideoRoutes } from "./routes/videos.js";
 import { registerSpriteRoutes } from "./routes/sprites.js";
 import { registerTerminalRoutes } from "./routes/terminal.js";
 import { registerFileRoutes } from "./routes/files.js";
-import { registerDownloadRoutes } from "./routes/downloads.js";
-import { registerAuthRoutes } from "./routes/auth.js";
-import { createDownloadService } from "./lib/download-service.js";
-import { AUTH_COOKIE, parseCookies, verifyToken, verifyShareToken } from "./lib/auth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = Fastify({ logger: false, routerOptions: { maxParamLength: 500 } });
@@ -83,7 +79,6 @@ const { spriteJobs, runSpriteGeneration, isJobRunning, cancelJob } = createSprit
   spritesDir: SPRITES_DIR,
   fileExists,
 });
-const downloadService = createDownloadService({ videosDir: VIDEOS_DIR });
 
 async function listPlaceholderImageUrls() {
   try {
@@ -116,50 +111,6 @@ app.addHook("onRequest", async (request) => {
   touchActivity();
 });
 
-// Paths reachable without a valid session. Static client assets (anything not
-// under /api, /ws, /terminal) load freely so the password gate can render; the
-// auth, health, and infra endpoints below are called without a browser cookie.
-const PUBLIC_API_PATHS = new Set([
-  "/api/health",
-  "/api/runtime/status",
-  "/api/cf-url",
-  "/cf",
-]);
-
-function isProtectedPath(url: string): boolean {
-  const p = url.split("?")[0];
-  if (p.startsWith("/api/auth/")) return false;
-  if (PUBLIC_API_PATHS.has(p)) return false;
-  return p.startsWith("/api/") || p.startsWith("/ws/") || p.startsWith("/terminal");
-}
-
-// A valid per-video share token grants cookie-free access to just that video's
-// stream, so "Copy Link" URLs play/download for people without the password.
-function hasValidStreamShareToken(url: string): boolean {
-  const [pathname, queryString = ""] = url.split("?");
-  if (!pathname.startsWith("/api/stream/")) return false;
-  const rawId = pathname.slice("/api/stream/".length);
-  if (!rawId) return false;
-  let id: string;
-  try {
-    id = decodeURIComponent(rawId);
-  } catch {
-    id = rawId;
-  }
-  const token = new URLSearchParams(queryString).get("token");
-  return verifyShareToken(id, token);
-}
-
-// Require a valid session cookie for all data, media, and terminal endpoints.
-app.addHook("onRequest", async (request, reply) => {
-  if (!isProtectedPath(request.url)) return;
-  if (hasValidStreamShareToken(request.url)) return;
-  const cookies = parseCookies(request.headers.cookie);
-  if (!verifyToken(cookies[AUTH_COOKIE])) {
-    return reply.status(401).send({ error: "Unauthorized" });
-  }
-});
-
 app.get("/api/health", async () => {
   return { status: "ok", timestamp: new Date().toISOString(), cloudflareUrl };
 });
@@ -175,7 +126,6 @@ app.get("/api/runtime/status", async () => {
     lastActivityAt,
     terminalConnectionCount: terminalState.connectionCount,
     activeSpriteJobs,
-    activeDownloads: downloadService.countActiveJobs(),
   };
 });
 
@@ -328,10 +278,6 @@ registerTerminalRoutes(app, {
 });
 
 registerFileRoutes(app, { DATA_DIR });
-
-registerDownloadRoutes(app, { downloadService, touchActivity });
-
-registerAuthRoutes(app);
 
 app.setNotFoundHandler(async (request, reply) => {
   if (request.url.startsWith("/api/") || request.url.startsWith("/ws/")) {

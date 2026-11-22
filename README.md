@@ -95,7 +95,7 @@ Frontend dev server runs at `http://localhost:5173`.
 modal run app.py
 ```
 
-This builds the client, starts the backend, opens a Cloudflare tunnel, and prints the public URL. The container auto-stops after 2 hours of inactivity.
+This builds the image (including the client bundle), starts the backend, opens a Cloudflare tunnel, and prints the public URL. The container auto-stops after 2 hours of inactivity.
 
 The `launch()` endpoint provides a web URL that auto-starts the container on first visit and redirects to the tunnel once ready.
 

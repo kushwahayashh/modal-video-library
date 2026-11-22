@@ -23,7 +23,7 @@
   max-height: calc(100vh - 40px);
   background: var(--bg-card);
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-xl);
   display: flex;
   flex-direction: column;
   overflow: hidden;

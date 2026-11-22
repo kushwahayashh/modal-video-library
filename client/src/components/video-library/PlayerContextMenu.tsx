@@ -7,17 +7,7 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-import {
-  IconPlayerPlayFilled,
-  IconPlayerPauseFilled,
-  IconRewindBackward5,
-  IconRewindForward5,
-  IconRepeat,
-  IconChartBar,
-  IconCopy,
-  IconDownload,
-  IconInfoCircle,
-} from "@tabler/icons-react";
+import { makeSolarIcon, IconBack5, IconForward5, IconPlayLinear, IconCopyLinear, IconDownloadLinear, type SolarIcon } from "./solar-icons";
 
 export interface PlayerContextMenuState {
   visible: boolean;
@@ -37,14 +27,17 @@ interface PlayerContextMenuProps {
 interface MenuItem {
   id: string;
   label: string;
-  icon: typeof IconPlayerPlayFilled;
-  stroke?: number;
+  icon: SolarIcon;
   active?: boolean;
 }
 
+const IconLoop = makeSolarIcon(
+  '<path fill="currentColor" fill-rule="evenodd" d="M7 7.75a4.25 4.25 0 0 0 0 8.5c.597 0 1.045-.107 1.407-.284c.362-.176.679-.442.986-.816c.54-.66.983-1.558 1.567-2.741q.175-.355.37-.744l.34-.69c.581-1.181 1.117-2.27 1.777-3.075c.41-.501.89-.923 1.49-1.215S16.216 6.25 17 6.25a5.75 5.75 0 1 1-3.45 10.35a.75.75 0 0 1 .9-1.2A4.25 4.25 0 1 0 17 7.75c-.597 0-1.045.107-1.407.284c-.362.176-.679.442-.986.816c-.54.66-.983 1.558-1.567 2.741q-.175.355-.37.744l-.34.69c-.581 1.181-1.117 2.27-1.777 3.076c-.41.5-.89.922-1.49 1.214s-1.28.435-2.063.435A5.75 5.75 0 1 1 10.451 7.4a.75.75 0 1 1-.901 1.2A4.23 4.23 0 0 0 7 7.75" clip-rule="evenodd"/>'
+);
+
 const VIEWPORT_MARGIN = 8;
 const CLOSE_ANIMATION_MS = 140;
-const MENU_ICON_SIZE = 18;
+const MENU_ICON_SIZE = 20;
 
 function clamp(value: number, min: number, max: number) {
   if (max < min) return min;
@@ -83,15 +76,13 @@ export default function PlayerContextMenu({ state, playing, loop, containerRef, 
       {
         id: "play-pause",
         label: playing ? "Pause" : "Play",
-        icon: playing ? IconPlayerPauseFilled : IconPlayerPlayFilled,
+        icon: IconPlayLinear,
       },
-      { id: "back-5", label: "Back 5 seconds", icon: IconRewindBackward5, stroke: 2.5 },
-      { id: "forward-5", label: "Forward 5 seconds", icon: IconRewindForward5, stroke: 2.5 },
-      { id: "loop", label: "Loop", icon: IconRepeat, stroke: 2.5, active: loop },
-      { id: "stats", label: "Stats for nerds", icon: IconChartBar, stroke: 2.5 },
-      { id: "info", label: "Properties", icon: IconInfoCircle, stroke: 2.5 },
-      { id: "copy-link", label: "Copy video URL", icon: IconCopy, stroke: 2.5 },
-      { id: "download", label: "Download", icon: IconDownload, stroke: 2.5 },
+      { id: "back-5", label: "Back 5 seconds", icon: IconBack5 },
+      { id: "forward-5", label: "Forward 5 seconds", icon: IconForward5 },
+      { id: "loop", label: "Loop", icon: IconLoop, active: loop },
+      { id: "copy-link", label: "Copy video URL", icon: IconCopyLinear },
+      { id: "download", label: "Download", icon: IconDownloadLinear },
     ],
     [playing, loop]
   );
@@ -264,7 +255,7 @@ export default function PlayerContextMenu({ state, playing, loop, containerRef, 
               onClose();
             }}
           >
-            <item.icon size={MENU_ICON_SIZE} stroke={item.stroke} />
+            <item.icon size={MENU_ICON_SIZE} />
             <span>{item.label}</span>
             {item.active && <span className="context-menu-item-tick" aria-hidden>✓</span>}
           </button>

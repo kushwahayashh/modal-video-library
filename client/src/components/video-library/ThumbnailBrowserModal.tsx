@@ -1,6 +1,6 @@
 import "../video-library/VideoActionModal.css";
 import { useRef, useState, useId } from "react";
-import { IconUpload } from "@tabler/icons-react";
+import { IconUpload } from "./solar-icons";
 import ThumbnailPicker from "../ThumbnailPicker";
 import { useDialogFocusTrap } from "../../hooks/useDialogFocusTrap";
 import { toast } from "sonner";
@@ -11,7 +11,7 @@ interface ThumbnailBrowserModalProps {
   placeholderImages: string[];
   placeholdersLoading: boolean;
   selectedThumbnail?: string;
-  onSelect?: (image: string) => void;
+  onSelect: (image: string) => void;
   onClose: () => void;
   onClosed: () => void;
   onPlaceholderImagesAdded?: (newUrls: string[]) => void;
@@ -131,7 +131,7 @@ export default function ThumbnailBrowserModal({
               onClick={handleUploadClick}
               disabled={uploading}
             >
-              <IconUpload size={20} stroke={2.5} />
+              <IconUpload size={20} />
               {uploading ? "Uploading…" : "Upload"}
             </button>
             <button type="button" className="action-btn secondary" onClick={onClose}>Cancel</button>
@@ -142,7 +142,7 @@ export default function ThumbnailBrowserModal({
             images={placeholderImages}
             loading={placeholdersLoading}
             selectedImage={selectedThumbnail}
-            onSelect={onSelect || (() => {})}
+            onSelect={onSelect}
             onDelete={handleDelete}
           />
         </div>

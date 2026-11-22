@@ -8,21 +8,14 @@ import {
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
-import { IconPlayerPlayFilled, IconPlayerPauseFilled, IconMaximize, IconMinimize, IconBrandSpeedtest, IconRewindBackward5, IconRewindForward5, IconVolume, IconVolume2, IconVolumeOff, IconSelectAll, IconX } from "@tabler/icons-react";
+import { IconPlayFilled, IconPauseFilled, IconFullscreenExpand, IconMinimizeSquare, IconFillExpand, IconVolumeMuted, IconVolumeLow, IconBack5, IconForward5, IconSpeedometer } from "./solar-icons";
 import { useVideoPlayer, type SpriteCue } from "../../hooks/useVideoPlayer";
 import PlayerContextMenu, { type PlayerContextMenuState } from "./PlayerContextMenu";
-import { formatBytes, buildStreamUrl } from "../../utils";
-import type { VideoProperties } from "./types";
-import type { Video } from "../../types";
-import VideoActionModal from "./VideoActionModal";
+import { buildStreamUrl } from "../../utils";
 
 interface CustomVideoPlayerProps {
   videoId?: string;
   hasSprites?: boolean;
-  /** Signed token used to build shareable (password-free) copy/download links. */
-  shareToken?: string;
-  /** When set, play this URL directly instead of the library stream endpoint. */
-  streamSrc?: string;
 }
 
 interface SpriteHover {
@@ -59,14 +52,13 @@ function formatTime(seconds: number): string {
   return `${m}:${ss}`;
 }
 
-export default function CustomVideoPlayer({ videoId, hasSprites, shareToken, streamSrc }: CustomVideoPlayerProps) {
+export default function CustomVideoPlayer({ videoId, hasSprites }: CustomVideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const volumeTrackRef = useRef<HTMLDivElement>(null);
   const speedMenuRef = useRef<HTMLDivElement>(null);
 
-  // External streams have no library id, so the source comes from streamSrc.
-  const sourceUrl = streamSrc ?? (videoId ? `/api/stream/${videoId}` : "");
+  const sourceUrl = videoId ? `/api/stream/${videoId}` : "";
 
   // Button refs for keyboard-shortcut press animations
   const btnPlayRef = useRef<HTMLButtonElement>(null);
@@ -103,56 +95,6 @@ export default function CustomVideoPlayer({ videoId, hasSprites, shareToken, str
 
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [fillToEdge, setFillToEdge] = useState(false);
-  const [showProperties, setShowProperties] = useState(false);
-  const [propertiesClosing, setPropertiesClosing] = useState(false);
-  const [propertiesVideoMeta, setPropertiesVideoMeta] = useState<Video | null>(null);
-  const [propertiesData, setPropertiesData] = useState<VideoProperties | null>(null);
-
-  useEffect(() => {
-    if (!showProperties) return;
-    if (!videoId) return;
-    setPropertiesData(null);
-    let active = true;
-    fetch(`/api/videos/${videoId}`)
-      .then((r) => {
-        if (!r.ok) throw new Error("Failed to load properties");
-        return r.json();
-      })
-      .then((data) => {
-        if (active) {
-          setPropertiesData(data);
-          setPropertiesVideoMeta(data);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          const fallback: VideoProperties = {
-            id: videoId,
-            title: `Video (${videoId})`,
-            filename: `stream_${videoId}.mp4`,
-            size: "",
-            duration: "",
-            hasSprites: hasSprites || false,
-          };
-          setPropertiesData(fallback);
-          setPropertiesVideoMeta(fallback);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [showProperties, videoId, hasSprites]);
-
-  const closePropertiesModal = useCallback(() => {
-    setPropertiesClosing(true);
-  }, []);
-
-  const finalizeClosePropertiesModal = useCallback(() => {
-    setPropertiesClosing(false);
-    setShowProperties(false);
-    setPropertiesData(null);
-    setPropertiesVideoMeta(null);
-  }, []);
 
   const triggerPress = useCallback((btn: HTMLButtonElement) => {
     btn.classList.remove("vp-btn-pressing");
@@ -471,25 +413,17 @@ export default function CustomVideoPlayer({ videoId, hasSprites, shareToken, str
     setContextMenu({ visible: true, x, y });
   }, [containerRef, closeContextMenu]);
 
-  const [showStats, setShowStats] = useState(false);
-  const [videoMeta, setVideoMeta] = useState({ width: 0, height: 0, loop: false, playbackRate: 1 });
+  const [loop, setLoop] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const syncMeta = () => {
-      setVideoMeta({
-        width: video.videoWidth,
-        height: video.videoHeight,
-        loop: video.loop,
-        playbackRate: video.playbackRate,
-      });
+    const syncLoop = () => {
+      setLoop(video.loop);
     };
-    video.addEventListener("loadedmetadata", syncMeta);
-    video.addEventListener("ratechange", syncMeta);
+    video.addEventListener("loadedmetadata", syncLoop);
     return () => {
-      video.removeEventListener("loadedmetadata", syncMeta);
-      video.removeEventListener("ratechange", syncMeta);
+      video.removeEventListener("loadedmetadata", syncLoop);
     };
   }, []);
 
@@ -508,36 +442,22 @@ export default function CustomVideoPlayer({ videoId, hasSprites, shareToken, str
       case "loop":
         if (video) {
           video.loop = !video.loop;
-          setVideoMeta((prev) => ({ ...prev, loop: video.loop }));
+          setLoop(video.loop);
         }
-        break;
-      case "stats":
-        setShowStats((prev) => !prev);
-        break;
-      case "info":
-        setPropertiesVideoMeta({
-          id: videoId ?? "",
-          title: "Loading...",
-          filename: "",
-          size: "",
-          duration: "",
-          hasSprites: hasSprites || false,
-        });
-        setShowProperties(true);
         break;
       case "copy-link":
         void navigator.clipboard.writeText(
-          streamSrc ? streamSrc : buildStreamUrl(videoId ?? "", { shareToken, absolute: true })
+          buildStreamUrl(videoId ?? "", { absolute: true })
         );
         break;
       case "download":
         window.open(
-          streamSrc ? streamSrc : buildStreamUrl(videoId ?? "", { download: true, shareToken }),
+          buildStreamUrl(videoId ?? "", { download: true }),
           "_blank"
         );
         break;
     }
-  }, [togglePlay, handleSeekStep, videoId, hasSprites, shareToken, streamSrc]);
+  }, [togglePlay, handleSeekStep, videoId]);
 
   const handleVolumePointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -596,20 +516,6 @@ export default function CustomVideoPlayer({ videoId, hasSprites, shareToken, str
     ? Math.max(spriteEdge, Math.min(spritePreview.x, Math.max(spriteEdge, progressWidth - spriteEdge)))
     : 0;
 
-  const hasVideoDetails = !!(
-    propertiesData?.resolution ||
-    propertiesData?.videoCodec ||
-    propertiesData?.videoBitrate ||
-    propertiesData?.framerate ||
-    propertiesData?.pixelFormat
-  );
-  const hasAudioDetails = !!(
-    propertiesData?.audioCodec ||
-    propertiesData?.audioBitrate ||
-    propertiesData?.audioChannels ||
-    propertiesData?.sampleRate
-  );
-
   return (
     <div
       ref={containerRef}
@@ -625,57 +531,19 @@ export default function CustomVideoPlayer({ videoId, hasSprites, shareToken, str
         <source src={sourceUrl} />
       </video>
 
-      {showStats && (
-        <div className="vp-stats-overlay" onClick={(e) => e.stopPropagation()}>
-          <div className="vp-stats-header">
-            <span>Stats for Nerds</span>
-            <button className="vp-stats-close" onClick={() => setShowStats(false)}><IconX size={14} /></button>
-          </div>
-          <div className="vp-stats-row"><span>Resolution</span><span>{videoMeta.width}×{videoMeta.height}</span></div>
-          <div className="vp-stats-row"><span>Duration</span><span>{formatTime(duration)}</span></div>
-          <div className="vp-stats-row"><span>Current Time</span><span>{formatTime(currentTime)}</span></div>
-          <div className="vp-stats-row"><span>Volume</span><span>{Math.round(volume * 100)}%</span></div>
-          <div className="vp-stats-row"><span>Speed</span><span>{videoMeta.playbackRate}x</span></div>
-          <div className="vp-stats-row"><span>Loop</span><span>{videoMeta.loop ? "On" : "Off"}</span></div>
-          <div className="vp-stats-row"><span>Buffered</span><span>{Math.round(buffered * 100)}%</span></div>
-        </div>
-      )}
-
-      {showProperties && (
-        <VideoActionModal
-          actionModal="properties"
-          closing={propertiesClosing}
-          actionVideo={propertiesVideoMeta}
-          actionLoading={false}
-          renameValue=""
-          onRenameValueChange={() => {}}
-          onClose={closePropertiesModal}
-          onClosed={finalizeClosePropertiesModal}
-          onRenameKeyDown={() => {}}
-          onConfirmRename={() => {}}
-          onConfirmDelete={() => {}}
-          videoProps={propertiesData}
-          hasVideoDetails={hasVideoDetails}
-          hasAudioDetails={hasAudioDetails}
-          placeholderImages={[]}
-          placeholdersLoading={false}
-          onThumbnailSelect={() => {}}
-        />
-      )}
-
       {playFlash && (
         <div key={playFlash.id} className="vp-center-flash">
           {playFlash.playing
-            ? <IconPlayerPlayFilled size={FLASH_ICON_SIZE} fill="currentColor" strokeWidth={0} />
-            : <IconPlayerPauseFilled size={FLASH_ICON_SIZE} fill="currentColor" strokeWidth={0} />}
+            ? <IconPlayFilled size={FLASH_ICON_SIZE} />
+            : <IconPauseFilled size={FLASH_ICON_SIZE} />}
         </div>
       )}
 
       {seekFlash && (
         <div key={seekFlash.id} className={`vp-seek-flash vp-seek-flash--${seekFlash.dir}`}>
           {seekFlash.dir === "back"
-            ? <IconRewindBackward5 size={FLASH_ICON_SIZE} />
-            : <IconRewindForward5 size={FLASH_ICON_SIZE} />}
+            ? <IconBack5 size={FLASH_ICON_SIZE} />
+            : <IconForward5 size={FLASH_ICON_SIZE} />}
         </div>
       )}
 
@@ -727,23 +595,23 @@ export default function CustomVideoPlayer({ videoId, hasSprites, shareToken, str
           <div className="vp-controls-left">
             <button ref={btnPlayRef} className="vp-btn" onClick={togglePlay} aria-label={playing ? "Pause" : "Play"}>
               {playing ? (
-                <IconPlayerPauseFilled size={CONTROL_ICON_SIZE} fill="currentColor" strokeWidth={0} />
+                <IconPauseFilled size={CONTROL_ICON_SIZE} />
               ) : (
-                <IconPlayerPlayFilled size={CONTROL_ICON_SIZE} fill="currentColor" strokeWidth={0} />
+                <IconPlayFilled size={CONTROL_ICON_SIZE} />
               )}
             </button>
 
             <button ref={btnSeekBackRef} className="vp-btn" onClick={() => handleSeekStep(-5)} onPointerDown={pressBtn} onKeyDown={pressBtnKey} aria-label="Seek backward 5 seconds" title="Back 5 seconds">
-              <IconRewindBackward5 size={CONTROL_ICON_SIZE} />
+              <IconBack5 size={CONTROL_ICON_SIZE} />
             </button>
 
             <button ref={btnSeekFwdRef} className="vp-btn" onClick={() => handleSeekStep(5)} onPointerDown={pressBtn} onKeyDown={pressBtnKey} aria-label="Seek forward 5 seconds" title="Forward 5 seconds">
-              <IconRewindForward5 size={CONTROL_ICON_SIZE} />
+              <IconForward5 size={CONTROL_ICON_SIZE} />
             </button>
 
             <div className="vp-volume-group" onWheel={handleVolumeWheel}>
               <button ref={btnMuteRef} className="vp-btn" onClick={toggleMute} aria-label={muted ? "Unmute" : "Mute"}>
-                {volumeLevel === 0 ? <IconVolumeOff size={CONTROL_ICON_SIZE} /> : volumeLevel === 1 ? <IconVolume size={CONTROL_ICON_SIZE} /> : <IconVolume2 size={CONTROL_ICON_SIZE} />}
+                {volumeLevel === 0 ? <IconVolumeMuted size={CONTROL_ICON_SIZE} /> : <IconVolumeLow size={CONTROL_ICON_SIZE} />}
               </button>
               <div
                 className="vp-volume-slider-wrap"
@@ -772,7 +640,7 @@ export default function CustomVideoPlayer({ videoId, hasSprites, shareToken, str
                 aria-label={`Playback speed ${playbackRate}x`}
                 title={`Playback speed ${playbackRate}x`}
               >
-                <IconBrandSpeedtest size={CONTROL_ICON_SIZE - 2} />
+                <IconSpeedometer size={CONTROL_ICON_SIZE - 2} />
               </button>
               {showSpeedMenu && (
                 <div className="vp-speed-menu">
@@ -805,14 +673,14 @@ export default function CustomVideoPlayer({ videoId, hasSprites, shareToken, str
               title={fillToEdge ? "Fit video in frame" : "Fill video to edges"}
               aria-pressed={fillToEdge}
             >
-              <IconSelectAll size={CONTROL_ICON_SIZE - 1} />
+              <IconFillExpand size={CONTROL_ICON_SIZE - 1} />
             </button>
 
             <button ref={btnFullscreenRef} className="vp-btn" onClick={toggleFullscreen} aria-label="Fullscreen">
               {isFullscreen ? (
-                <IconMinimize size={CONTROL_ICON_SIZE} />
+                <IconMinimizeSquare size={CONTROL_ICON_SIZE} />
               ) : (
-                <IconMaximize size={CONTROL_ICON_SIZE} />
+                <IconFullscreenExpand size={CONTROL_ICON_SIZE} />
               )}
             </button>
           </div>
@@ -822,7 +690,7 @@ export default function CustomVideoPlayer({ videoId, hasSprites, shareToken, str
       <PlayerContextMenu
         state={contextMenu}
         playing={playing}
-        loop={videoMeta.loop}
+        loop={loop}
         containerRef={containerRef}
         onClose={closeContextMenu}
         onAction={handleContextMenuAction}

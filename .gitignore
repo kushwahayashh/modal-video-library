@@ -10,3 +10,6 @@ data/
 .env
 .env.*
 !.env.example
+worker.js
+.local-data/
+*.tsbuildinfo

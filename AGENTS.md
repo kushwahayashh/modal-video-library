@@ -12,7 +12,7 @@ All UI changes must follow the app's existing design language:
   - Semantic: `--danger`, `--success`, `--warning` only for their intended purposes
 - **No colored accents for informational UI** — badges, labels, and indicators use the neutral palette (text-secondary, bg-tertiary, border)
 - **Font**: Varela Round (UI), Space Mono (monospace)
-- **Border radius**: sharp corners (0px); only circular controls (e.g. slider knobs) use 50%
+- **Border radius**: rounded Apple-like scale via tokens in `client/src/index.css` — `--radius-xs` (6px badges), `--radius-sm` (10px buttons/inputs), `--radius-md` (14px menus/panels), `--radius-lg` (18px cards/modals), `--radius-xl` (22px player modal), `--radius-full` (pills, search, progress bars); circular controls (e.g. slider knobs) stay 50%
 - **Subtle, flat aesthetic** — no shadows, no gradients, no glow effects
 - **Backdrop blur** on overlays/nav only
 

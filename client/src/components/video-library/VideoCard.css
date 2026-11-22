@@ -3,10 +3,12 @@
   height: 100%;
   background: var(--bg-card);
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   transition: background 0.2s ease;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
 }
 
 .video-card:hover {
@@ -55,7 +57,7 @@
   padding: 4px 8px;
   background: var(--overlay-strong);
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-xs);
   font-size: 0.75rem;
   font-weight: 500;
   letter-spacing: 0.02em;
@@ -78,6 +80,9 @@
 
 .video-info {
   padding: 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .video-title {
@@ -100,4 +105,5 @@
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--text-secondary);
+  margin-top: auto;
 }

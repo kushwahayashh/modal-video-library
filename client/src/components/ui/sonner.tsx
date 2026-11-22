@@ -11,7 +11,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           background: "var(--bg-card)",
           color: "var(--text-primary)",
           border: "1px solid var(--border)",
-          borderRadius: "0px",
+          borderRadius: "var(--radius-md)",
           fontFamily: "var(--font-sans)",
           fontSize: "0.8125rem",
           boxShadow: "none",

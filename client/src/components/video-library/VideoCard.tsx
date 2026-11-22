@@ -1,13 +1,11 @@
 import "./VideoCard.css";
 import { useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
 import type { Video } from "../../types";
-import { getStablePlaceholder } from "./helpers";
 
 interface VideoCardProps {
   video: Video;
   onClick: () => void;
   onContextMenu: (e: ReactMouseEvent, video: Video) => void;
-  placeholderImages: string[];
   thumbnailOverrides: Record<string, string>;
   watchProgress?: { currentTime: number; duration: number };
 }
@@ -16,25 +14,19 @@ export default function VideoCard({
   video,
   onClick,
   onContextMenu,
-  placeholderImages,
   thumbnailOverrides,
   watchProgress,
 }: VideoCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
 
-  const stablePlaceholderKey =
-    `${video.addedAt || video.createdAt || ""}|${video.sizeBytes || 0}|${video.duration || ""}`;
-  const fallbackPlaceholder = getStablePlaceholder(stablePlaceholderKey, placeholderImages);
-  
-  const preferredSrc = thumbnailOverrides[video.id] || video.thumbnail;
-  // If the preferred image (override) 404s or fails to load, gracefully fall back to the stable auto-generated one
-  const imgSrc = imageFailed && preferredSrc ? fallbackPlaceholder : (preferredSrc || fallbackPlaceholder);
+  // Server is the single source of truth: scan persists a thumbnail per video.
+  const imgSrc = thumbnailOverrides[video.id] || video.thumbnail || null;
 
   useEffect(() => {
     setImageLoaded(false);
     setImageFailed(false);
-  }, [preferredSrc, fallbackPlaceholder]);
+  }, [imgSrc]);
 
   const handleContextMenu = (e: ReactMouseEvent) => {
     e.preventDefault();
@@ -45,19 +37,14 @@ export default function VideoCard({
     <div className="video-card" onClick={onClick} onContextMenu={handleContextMenu}>
       <div className="video-thumbnail">
         <div className="video-placeholder skeleton"></div>
-        {imgSrc && (
+        {imgSrc && !imageFailed && (
           <img
             src={imgSrc}
             alt=""
             loading="lazy"
             className={`video-thumb-img ${imageLoaded ? "loaded" : ""}`}
             onLoad={() => setImageLoaded(true)}
-            onError={() => {
-              // If the preferred src fails, mark it so it swaps to fallback
-              if (!imageFailed && preferredSrc && fallbackPlaceholder) {
-                setImageFailed(true);
-              }
-            }}
+            onError={() => setImageFailed(true)}
           />
         )}
         {video.duration && <div className="video-duration">{video.duration}</div>}

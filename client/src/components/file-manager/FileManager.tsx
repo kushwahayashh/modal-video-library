@@ -1,14 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react";
 import { toast } from "sonner";
-import {
-  IconSignature,
-  IconTrash,
-  IconFolderOpen,
-  IconFileBroken,
-  IconDownload,
-  IconAlertSquareRoundedFilled,
-  IconTrashFilled,
-} from "@tabler/icons-react";
+import { IconFileLines, IconFolder, IconPenLinear, IconTrashLinear, IconDownloadLinear, IconInfoLinear, IconRefresh, IconFolderAdd, IconArrowLeft, IconTerminalConsole, IconLogoMark } from "../video-library/solar-icons";
 import "./FileManager.css";
 import "../video-library/ContextMenu.css";
 
@@ -318,47 +310,20 @@ export default function FileManager({ onBack }: { onBack?: () => void } = {}) {
   };
 
   const ctxMenuItems = [
-    { id: "rename", label: "Rename", icon: IconSignature, stroke: 2.5 },
-    { id: "download", label: "Download", icon: IconDownload, stroke: 2.5 },
-    { id: "info", label: "Properties", icon: IconAlertSquareRoundedFilled },
-    { id: "delete", label: "Delete", icon: IconTrashFilled, danger: true },
+    { id: "rename", label: "Rename", icon: IconPenLinear },
+    { id: "download", label: "Download", icon: IconDownloadLinear },
+    { id: "info", label: "Properties", icon: IconInfoLinear },
+    { id: "delete", label: "Delete", icon: IconTrashLinear, danger: true },
   ];
-
-  const breadcrumbs = currentPath === "/" ? ["/"] : ["/", ...currentPath.split("/").filter(Boolean)];
-  const breadcrumbPaths = breadcrumbs.map((_, i) => {
-    if (i === 0) return "/";
-    return "/" + breadcrumbs.slice(1, i + 1).join("/");
-  });
 
   return (
     <div className="fm-app">
       <nav className="nav">
         <div className="container nav-content">
           <a className="nav-logo" href="/cf">
+            <IconLogoMark size={24} />
             VIDEO<span>LIB</span> FILES
           </a>
-
-          <div className="fm-nav-breadcrumbs">
-            {breadcrumbs.map((seg, i) => {
-              const isLast = i === breadcrumbs.length - 1;
-              return (
-                <React.Fragment key={i}>
-                  {i > 0 && (
-                    <span className="fm-breadcrumb-sep">/</span>
-                  )}
-                  <span className="fm-breadcrumb-segment">
-                    <button
-                      className={`fm-breadcrumb-btn ${isLast ? "active" : ""}`}
-                      onClick={() => navigateTo(breadcrumbPaths[i])}
-                      disabled={isLast}
-                    >
-                      {seg === "/" ? "root" : seg}
-                    </button>
-                  </span>
-                </React.Fragment>
-              );
-            })}
-          </div>
 
           <div className="nav-right">
             <button
@@ -367,6 +332,7 @@ export default function FileManager({ onBack }: { onBack?: () => void } = {}) {
               onClick={() => fetchFiles(currentPath)}
               title="Refresh"
             >
+              <IconRefresh size={18} />
               Refresh
             </button>
             <button
@@ -377,6 +343,7 @@ export default function FileManager({ onBack }: { onBack?: () => void } = {}) {
                 setNewFolderName("");
               }}
             >
+              <IconFolderAdd size={18} />
               New Folder
             </button>
             <a
@@ -389,9 +356,11 @@ export default function FileManager({ onBack }: { onBack?: () => void } = {}) {
                 }
               }}
             >
+              <IconArrowLeft size={18} />
               Video Library
             </a>
             <a href="/terminal" target="_blank" rel="noopener noreferrer" className="nav-btn nav-btn-terminal">
+              <IconTerminalConsole size={18} />
               Terminal
             </a>
           </div>
@@ -437,7 +406,7 @@ export default function FileManager({ onBack }: { onBack?: () => void } = {}) {
             </div>
           ) : items.length === 0 && !creatingFolder ? (
             <div className="fm-empty">
-              <IconFolderOpen size={48} className="fm-empty-icon" />
+              <IconFolder size={48} className="fm-empty-icon" />
               <p style={{ marginTop: "16px" }}>This folder is empty</p>
             </div>
           ) : (
@@ -448,7 +417,7 @@ export default function FileManager({ onBack }: { onBack?: () => void } = {}) {
                   onClick={() => navigateTo(parentPath)}
                 >
                   <div className="fm-col-name">
-                    <IconFolderOpen size={26} className="fm-icon-folder" />
+                    <IconFolder size={26} className="fm-icon-folder" />
                     <span className="fm-name">..</span>
                   </div>
                   <div className="fm-col-size">—</div>
@@ -459,7 +428,7 @@ export default function FileManager({ onBack }: { onBack?: () => void } = {}) {
               {creatingFolder && (
                 <div className="fm-row fm-row-item fm-row-new-folder">
                   <div className="fm-col-name">
-                    <IconFolderOpen size={26} className="fm-icon-folder" />
+                    <IconFolder size={26} className="fm-icon-folder" />
                     <input
                       ref={newFolderInputRef}
                       className="fm-inline-input new-folder"
@@ -489,7 +458,7 @@ export default function FileManager({ onBack }: { onBack?: () => void } = {}) {
               )}
 
               {items.map((item, idx) => {
-                const Icon = item.isDirectory ? IconFolderOpen : IconFileBroken;
+                const Icon = item.isDirectory ? IconFolder : IconFileLines;
                 const iconClass = item.isDirectory ? "fm-icon-folder" : "fm-icon-file";
 
                 return (
@@ -539,13 +508,13 @@ export default function FileManager({ onBack }: { onBack?: () => void } = {}) {
                           setRenameValue(item.name);
                         }}
                       >
-                        <IconSignature size={20} /> Rename
+                        <IconPenLinear size={22} /> Rename
                       </button>
                       <button
                         className="fm-row-btn danger"
                         onClick={() => setDeleteConfirm(item)}
                       >
-                        <IconTrash size={20} /> Delete
+                        <IconTrashLinear size={22} /> Delete
                       </button>
                     </div>
                   </div>
@@ -572,7 +541,7 @@ export default function FileManager({ onBack }: { onBack?: () => void } = {}) {
                 className={`context-menu-item ${mi.danger ? "danger" : ""}`}
                 onClick={() => handleCtxAction(mi.id, ctxMenu.item!)}
               >
-                <mi.icon size={18} stroke={mi.stroke} />
+                <mi.icon size={18} />
                 <span>{mi.label}</span>
               </button>
             </div>

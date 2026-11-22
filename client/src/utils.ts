@@ -14,17 +14,14 @@ export function formatDate(dateStr: string | Date | null | undefined): string {
 }
 
 /**
- * Build a stream URL for a library video. When a share token is supplied the URL
- * works for anyone without the site password; otherwise it relies on the
- * logged-in session cookie (fine for in-app playback/downloads).
+ * Build a stream URL for a library video.
  */
 export function buildStreamUrl(
   videoId: string,
-  opts: { shareToken?: string; download?: boolean; absolute?: boolean } = {}
+  opts: { download?: boolean; absolute?: boolean } = {}
 ): string {
   const params = new URLSearchParams();
   if (opts.download) params.set("download", "1");
-  if (opts.shareToken) params.set("token", opts.shareToken);
   const query = params.toString();
   const path = `/api/stream/${videoId}${query ? `?${query}` : ""}`;
   return opts.absolute ? `${window.location.origin}${path}` : path;

@@ -39,6 +39,9 @@
 }
 
 .nav-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -75,12 +78,12 @@
 
 .nav-search {
   width: 100%;
-  padding: 10px 36px 10px 40px;
+  padding: 13px 36px 13px 40px;
   background: var(--bg-tertiary);
   border: none;
   color: var(--text-primary);
   font-size: 0.875rem;
-  border-radius: 0;
+  border-radius: var(--radius-full);
   transition: background 0.2s ease, color 0.2s ease;
 }
 
@@ -107,7 +110,7 @@
   background: none;
   border: none;
   color: var(--text-muted);
-  border-radius: 0;
+  border-radius: var(--radius-full);
   transition: color 0.15s ease, background 0.15s ease;
 }
 
@@ -126,12 +129,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   height: 36px;
   padding: 0 20px;
   background: var(--bg-card);
   color: var(--text-primary);
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-full);
   font-size: 0.875rem;
   font-weight: 500;
   line-height: 1;
@@ -183,7 +187,7 @@
 .skeleton-card {
   background: var(--bg-card);
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-lg);
   aspect-ratio: 16 / 12;
   position: relative;
   overflow: hidden;
@@ -212,7 +216,7 @@
   padding: 10px 12px;
   background: var(--bg-tertiary);
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-md);
 }
 
 .status-banner-text {
@@ -223,7 +227,7 @@
 
 .status-banner-btn {
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   background: var(--bg-card);
   color: var(--text-secondary);
   font-size: 0.8125rem;
@@ -268,7 +272,7 @@
 .empty-retry-btn {
   margin-top: 16px;
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   background: var(--bg-card);
   color: var(--text-secondary);
   font-size: 0.875rem;
@@ -292,7 +296,7 @@
   margin-top: 16px;
   padding: 10px 12px;
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-md);
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   font-size: 0.8125rem;
